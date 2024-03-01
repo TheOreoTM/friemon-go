@@ -1,9 +1,11 @@
 package commands
 
-import "github.com/bwmarrin/discordgo"
+import (
+	"github.com/bwmarrin/discordgo"
+)
 
 func init() {
-	Commands["ping"] = &Command{
+	cmds["ping"] = &command{
 		Meta: &discordgo.ApplicationCommand{
 			Name:        "ping",
 			Description: "Replies with Pong!",

@@ -28,14 +28,11 @@ func init() {
 	}
 }
 
-func init() {
-	s.AddHandler(commands.ExecuteCommand)
-}
-
 func Start() {
 	s.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
 		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
 	})
+
 	err := s.Open()
 	if err != nil {
 		log.Fatalf("Cannot open the session: %v", err)
@@ -43,6 +40,8 @@ func Start() {
 
 	log.Println("Adding commands...")
 	commands.Register(s, GuildID)
+
+	s.AddHandler(commands.ExecuteCommand)
 
 	defer s.Close()
 
@@ -52,4 +51,9 @@ func Start() {
 	<-stop
 
 	log.Println("Gracefully shutting down.")
+
+	if *RemoveCommands {
+		log.Println("Removing commands...")
+		commands.Unregister(s, GuildID)
+	}
 }
