@@ -76,7 +76,8 @@ func handleMessageCommands(s *discordgo.Session, m *discordgo.MessageCreate, cmd
 
 	command := strings.TrimSpace(strings.TrimPrefix(content, Prefix))
 	commandName := strings.Split(command, " ")[0]
-	args := strings.Split(command, " ")
+
+	args := parseArgs(command)
 	args = args[1:]
 
 	if h, ok := cmds[commandName]; ok {

@@ -12,21 +12,20 @@ func init() {
 			Name:        "ping",
 			Description: "Replies with Pong!",
 		},
-		ChatInputRun: chatInputRun,
-		MessageRun:   messageRun,
+		ChatInputRun: chatInputRunPing,
+		MessageRun:   messageRunPing,
 	}
 }
 
-func messageRun(s *discordgo.Session, m *discordgo.MessageCreate, args ...string) {
+func messageRunPing(s *discordgo.Session, m *discordgo.MessageCreate, args ...string) {
 	fmt.Println(args)
 
 	latency := s.HeartbeatLatency().Milliseconds()
 
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Pong! %vms", latency))
-	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("These are the args provided to the command %v", args))
 }
 
-func chatInputRun(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func chatInputRunPing(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	latency := s.HeartbeatLatency().Milliseconds()
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

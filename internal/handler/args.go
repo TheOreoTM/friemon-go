@@ -9,6 +9,6 @@ type Argument struct {
 	Required    bool
 }
 
-func ParseArgs(input string) []string {
+func parseArgs(input string) []string {
 	return strings.Fields(input)
 }
