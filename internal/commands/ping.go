@@ -10,11 +10,11 @@ func init() {
 			Name:        "ping",
 			Description: "Replies with Pong!",
 		},
-		Handler: ping,
+		ChatInputRun: chatInputRun,
 	}
 }
 
-func ping(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func chatInputRun(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{

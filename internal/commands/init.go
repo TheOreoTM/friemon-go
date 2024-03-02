@@ -8,8 +8,8 @@ import (
 )
 
 type command struct {
-	Meta    *discordgo.ApplicationCommand
-	Handler func(s *discordgo.Session, i *discordgo.InteractionCreate)
+	Meta         *discordgo.ApplicationCommand
+	ChatInputRun func(s *discordgo.Session, i *discordgo.InteractionCreate)
 }
 
 var cmds = map[string]*command{}
@@ -17,7 +17,7 @@ var registeredCommands = []*discordgo.ApplicationCommand{}
 
 func ExecuteCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if h, ok := cmds[i.ApplicationCommandData().Name]; ok {
-		h.Handler(s, i)
+		h.ChatInputRun(s, i)
 	}
 }
 
