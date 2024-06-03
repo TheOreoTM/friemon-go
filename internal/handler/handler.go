@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -82,10 +83,14 @@ func handleMessageCommands(s *discordgo.Session, m *discordgo.MessageCreate, cmd
 	command := strings.TrimSpace(strings.TrimPrefix(content, Prefix))
 	commandName := strings.Split(command, " ")[0]
 
+	startTime := time.Now()
 	args := ParseArgs(s, m.Message)
 	if args == nil {
 		args = &Args{}
 	}
+	endTime := time.Now()
+
+	fmt.Printf("Parsed args in %v\n", endTime.Sub(startTime))
 
 	if h, ok := cmds[commandName]; ok {
 		go h.MessageRun(s, m, args)

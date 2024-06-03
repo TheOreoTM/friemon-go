@@ -14,12 +14,9 @@ var (
 )
 
 func resolveUser(session *discordgo.Session, parameter string) *discordgo.User {
-	userId := UserOrMemberMentionRegex.FindStringSubmatch(parameter)
-	if userId == nil {
-		return nil
-	}
+	userId := strings.Trim(parameter, "<@!>")
 
-	user, err := session.User(userId[1])
+	user, err := session.User(userId)
 	if err != nil {
 		return nil
 	}
@@ -28,33 +25,28 @@ func resolveUser(session *discordgo.Session, parameter string) *discordgo.User {
 }
 
 func resolveMember(session *discordgo.Session, guild *discordgo.Guild, parameter string) (*discordgo.Member, error) {
-	member, err := resolveById(parameter, guild, session)
-	if err != nil {
-		return nil, err
-	}
-
-	if member == nil {
-		member, err = resolveByQuery(parameter, guild)
-		if err != nil {
-			return nil, err
-		}
-	}
-
+	member, _ := resolveById(parameter, guild, session)
 	if member != nil {
 		return member, nil
+	}
+
+	member, err := resolveByQuery(parameter, session, guild)
+	if member != nil {
+		return member, nil
+	}
+
+	if err != nil {
+		return nil, err
 	}
 
 	return nil, fmt.Errorf("ArgumentMemberError")
 }
 
 func resolveById(id string, guild *discordgo.Guild, session *discordgo.Session) (*discordgo.Member, error) {
-	memberId := UserOrMemberMentionRegex.FindStringSubmatch(id)
-	if len(memberId) == 0 {
-		memberId = SnowflakeRegex.FindStringSubmatch(id)
-	}
+	memberId := strings.Trim(id, "<@!>")
 
 	if len(memberId) > 0 {
-		member, err := session.GuildMember(guild.ID, memberId[1])
+		member, err := session.GuildMember(guild.ID, memberId)
 		if err != nil {
 			return nil, err
 		}
@@ -64,16 +56,20 @@ func resolveById(id string, guild *discordgo.Guild, session *discordgo.Session) 
 	return nil, nil
 }
 
-func resolveByQuery(argument string, guild *discordgo.Guild) (*discordgo.Member, error) {
+func resolveByQuery(argument string, session *discordgo.Session, guild *discordgo.Guild) (*discordgo.Member, error) {
 	if len(argument) > 5 && strings.Contains(argument, "#") {
 		argument = argument[:len(argument)-5]
 	}
 
-	members := guild.Members
-	for _, member := range members {
-		if strings.EqualFold(member.User.Username, argument) {
-			return member, nil
-		}
+	members, err := session.GuildMembersSearch(guild.ID, argument, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	member := members[0]
+
+	if member != nil {
+		return member, nil
 	}
 
 	return nil, nil

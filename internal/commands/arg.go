@@ -21,13 +21,13 @@ func init() {
 func messageRunArg(s *discordgo.Session, m *discordgo.MessageCreate, args *handler.Args) {
 	fmt.Printf("Args: %v\n", args)
 
-	user := args.GetUser()
+	user := args.GetMember()
 	if user == nil {
 		s.ChannelMessageSend(m.ChannelID, "User not found")
 		return
 	}
 
-	s.ChannelMessageSend(m.ChannelID, user.Username)
+	s.ChannelMessageSend(m.ChannelID, user.User.Username)
 }
 
 func chatInputRunArg(s *discordgo.Session, i *discordgo.InteractionCreate) {
