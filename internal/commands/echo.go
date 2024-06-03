@@ -1,13 +1,12 @@
 package commands
 
 import (
-	"strings"
-
 	"github.com/bwmarrin/discordgo"
+	"github.com/theoreotm/gordinal/internal/handler"
 )
 
 func init() {
-	cmds["echo"] = &Command{
+	cmds["echo"] = &handler.Command{
 		Meta: &discordgo.ApplicationCommand{
 			Name:        "echo",
 			Description: "Echos your message!",
@@ -25,8 +24,8 @@ func init() {
 	}
 }
 
-func messageRunEcho(s *discordgo.Session, m *discordgo.MessageCreate, args ...string) {
-	s.ChannelMessageSend(m.ChannelID, strings.Join(args, " "))
+func messageRunEcho(s *discordgo.Session, m *discordgo.MessageCreate, args *handler.Args) {
+	s.ChannelMessageSend(m.ChannelID, m.Content)
 }
 
 func chatInputRunEcho(s *discordgo.Session, i *discordgo.InteractionCreate) {

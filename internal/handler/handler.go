@@ -5,13 +5,18 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/theoreotm/gordinal/internal/commands"
 )
+
+type Command struct {
+	Meta         *discordgo.ApplicationCommand
+	ChatInputRun func(s *discordgo.Session, i *discordgo.InteractionCreate)
+	MessageRun   func(s *discordgo.Session, m *discordgo.MessageCreate, args *Args)
+}
 
 type Handler struct {
 	options  *SetupOptions
 	Session  *discordgo.Session
-	Commands map[string]*commands.Command
+	Commands map[string]*Command
 }
 
 type SetupOptions struct {
@@ -24,7 +29,7 @@ var (
 	CaseSensitive bool
 )
 
-func Setup(s *discordgo.Session, cmds map[string]*commands.Command, options *SetupOptions) *Handler {
+func Setup(s *discordgo.Session, cmds map[string]*Command, options *SetupOptions) *Handler {
 	if options == nil {
 		panic("Setup options cannot be nil")
 	} else {
@@ -62,7 +67,7 @@ func (h *Handler) LoadCommands() {
 
 }
 
-func handleMessageCommands(s *discordgo.Session, m *discordgo.MessageCreate, cmds map[string]*commands.Command) {
+func handleMessageCommands(s *discordgo.Session, m *discordgo.MessageCreate, cmds map[string]*Command) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
@@ -77,15 +82,17 @@ func handleMessageCommands(s *discordgo.Session, m *discordgo.MessageCreate, cmd
 	command := strings.TrimSpace(strings.TrimPrefix(content, Prefix))
 	commandName := strings.Split(command, " ")[0]
 
-	args := parseArgs(command)
-	args = args[1:]
+	args := ParseArgs(s, m.Message)
+	if args == nil {
+		args = &Args{}
+	}
 
 	if h, ok := cmds[commandName]; ok {
-		go h.MessageRun(s, m, args...)
+		go h.MessageRun(s, m, args)
 	}
 }
 
-func handleChatInputCommands(s *discordgo.Session, i *discordgo.InteractionCreate, cmds map[string]*commands.Command) {
+func handleChatInputCommands(s *discordgo.Session, i *discordgo.InteractionCreate, cmds map[string]*Command) {
 	if h, ok := cmds[i.ApplicationCommandData().Name]; ok {
 		go h.ChatInputRun(s, i)
 	}

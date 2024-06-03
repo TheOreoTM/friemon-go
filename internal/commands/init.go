@@ -5,18 +5,13 @@ import (
 	"log"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/theoreotm/gordinal/internal/handler"
 )
 
-type Command struct {
-	Meta         *discordgo.ApplicationCommand
-	ChatInputRun func(s *discordgo.Session, i *discordgo.InteractionCreate)
-	MessageRun   func(s *discordgo.Session, m *discordgo.MessageCreate, args ...string)
-}
-
-var cmds = make(map[string]*Command)
+var cmds = make(map[string]*handler.Command)
 var registeredCommands = []*discordgo.ApplicationCommand{}
 
-func Register(s *discordgo.Session, guildID *string) (commands map[string]*Command, registeredCommands []*discordgo.ApplicationCommand) {
+func Register(s *discordgo.Session, guildID *string) (map[string]*handler.Command, []*discordgo.ApplicationCommand) {
 	fmt.Printf("[Commands] Registering %v commands\n", len(cmds))
 	for _, command := range cmds {
 		registeredCommand, err := s.ApplicationCommandCreate(s.State.User.ID, *guildID, command.Meta)

@@ -4,10 +4,11 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/theoreotm/gordinal/internal/handler"
 )
 
 func init() {
-	cmds["ping"] = &Command{
+	cmds["ping"] = &handler.Command{
 		Meta: &discordgo.ApplicationCommand{
 			Name:        "ping",
 			Description: "Replies with Pong!",
@@ -17,7 +18,7 @@ func init() {
 	}
 }
 
-func messageRunPing(s *discordgo.Session, m *discordgo.MessageCreate, args ...string) {
+func messageRunPing(s *discordgo.Session, m *discordgo.MessageCreate, args *handler.Args) {
 	fmt.Println(args)
 
 	latency := s.HeartbeatLatency().Milliseconds()
