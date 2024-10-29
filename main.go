@@ -1,60 +1,81 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/bwmarrin/discordgo"
-	"github.com/bwmarrin/lit"
-	"github.com/peterbourgon/ff/v3"
+	"github.com/Karitham/corde"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/theoreotm/gordinal/discord"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
-	fmt.Printf(`
-	______         _   _
-	|  ___|       | | (_)
-	| |_ __ _  ___| |_ _  ___  _ __
-	|  _/ _' |/ __| __| |/ _ \| '_ \
-	| || (_| | (__| |_| | (_) | | | |
-	\_| \__,_|\___|\__|_|\___/|_| |_| %s
-`, "v0.0.1")
+	log.Logger = log.Level(zerolog.DebugLevel)
 
-	fs := flag.NewFlagSet("faction", flag.ExitOnError)
-	token := fs.String("token", "", "Discord Authentication Token")
-	fs.IntVar(&lit.LogLevel, "log-level", 0, "LogLevel (0-3)")
-	if err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("FACT")); err != nil {
-		lit.Error("could not parse flags: %v", err)
-		return
+	disc := &discordCmd{}
+
+	app := &cli.App{
+		Name:        "idk",
+		Usage:       "Run the bot, and use utils",
+		Version:     "0.0.1",
+		Description: "A bot for discord",
+		Commands: []*cli.Command{
+			{
+				Name:    "register",
+				Aliases: []string{"r"},
+				Usage:   "Register the bot commands",
+				Action:  disc.register,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "BOT_TOKEN",
+						EnvVars:     []string{"DISCORD_TOKEN", "BOT_TOKEN"},
+						Destination: &disc.botToken,
+						Required:    true,
+					},
+					&cliSnowflake{
+						EnvVars: []string{"DISCORD_GUILD_ID", "GUILD_ID"},
+						Dest:    disc.guildID,
+					},
+					&cli.StringFlag{
+						EnvVars:     []string{"DISCORD_APP_ID", "APP_ID"},
+						Destination: &disc.appID,
+						Required:    true,
+					},
+				},
+			},
+		},
+	}
+}
+
+type discordCmd struct {
+	botToken string
+	appID    string
+	guildID  *corde.Snowflake
+}
+
+func (dc *discordCmd) register(c *cli.Context) error {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	bot := &discord.Bot{
+		AppID:    corde.SnowflakeFromString(dc.appID),
+		BotToken: dc.botToken,
+		GuildID:  dc.guildID,
 	}
 
-	session, err := discordgo.New("Bot " + *token)
-	if err != nil {
-		fmt.Fprintf(fs.Output(), "Usage of %s:\n", fs.Name())
-		fs.PrintDefaults()
-		log.Println("You must provide a Discord authentication token.")
-		return
+	if err := bot.RegisterCommands(); err != nil {
+		return fmt.Errorf("error registering commands %v", err)
 	}
+	return nil
+}
 
-	session.Identify.Intents = discordgo.IntentsAllWithoutPrivileged |
-		discordgo.IntentsGuildMembers |
-		discordgo.IntentsGuildMessages
+func (dc *discordCmd) run(c *cli.Context) error {
+	disc := discord.New(&discord.Bot{
+		AppID:    corde.SnowflakeFromString(dc.appID),
+		GuildID:  dc.guildID,
+		BotToken: dc.botToken,
+	})
 
-	
-
-
-
-	if err := session.Open(); err != nil {
-		log.Fatalf("error opening connection to Discord: %v", err)
-	}
-	defer session.Close()
-
-	log.Println(`Now running. Press CTRL-C to exit.`)
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, syscall.SIGTERM)
-	<-sc
-
+	return disc.ListenAndServe(":" + dc.port)
 }
