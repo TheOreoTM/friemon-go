@@ -12,7 +12,6 @@ import (
 	"github.com/bwmarrin/lit"
 	"github.com/peterbourgon/ff/v3"
 	"github.com/theoreotm/gordinal/command"
-	"github.com/theoreotm/gordinal/command/commands"
 )
 
 func main() {
@@ -45,26 +44,23 @@ func main() {
 		discordgo.IntentsGuildMembers |
 		discordgo.IntentsGuildMessages
 
-	c, err := command.New(session)
-	if err != nil {
-		lit.Error("Could not create command: %v", err)
-	}
-
-	log.Println("Registering commands...")
-	c.Register(
-		commands.NewPingCommand(),
-	)
-
-	session.AddHandler(command.OnMessageCreateHandler)
+	session.AddHandler(command.OnInteractionCommand)
+	session.AddHandler(command.OnAutocomplete)
+	session.AddHandler(command.OnModalSubmit)
 
 	if err := session.Open(); err != nil {
 		log.Fatalf("error opening connection to Discord: %v", err)
 	}
 	defer session.Close()
 
+	command.Register(session, session.State.User.ID)
+
 	log.Println(`Now running. Press CTRL-C to exit.`)
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, syscall.SIGTERM)
 	<-sc
+
+	log.Println("Removing commands...")
+	command.Unregister(session, nil)
 
 }
