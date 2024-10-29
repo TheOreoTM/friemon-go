@@ -11,8 +11,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/bwmarrin/lit"
 	"github.com/peterbourgon/ff/v3"
-	"github.com/theoreotm/gordinal/command"
-	"github.com/theoreotm/gordinal/command/commands"
 )
 
 func main() {
@@ -45,17 +43,9 @@ func main() {
 		discordgo.IntentsGuildMembers |
 		discordgo.IntentsGuildMessages
 
-	c, err := command.New(session)
-	if err != nil {
-		lit.Error("Could not create command: %v", err)
-	}
+	
 
-	log.Println("Registering commands...")
-	c.Register(
-		commands.NewPingCommand(),
-	)
 
-	session.AddHandler(command.OnMessageCreateHandler)
 
 	if err := session.Open(); err != nil {
 		log.Fatalf("error opening connection to Discord: %v", err)
