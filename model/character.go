@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -46,7 +47,7 @@ type Character struct {
 	IvDef   int // The IV of the character's Defense
 	IvSpAtk int // The IV of the character's Sp. Attack
 	IvSpDef int // The IV of the character's Sp. Defense
-	IvSpe   int // The IV of the character's Speed
+	IvSpd   int // The IV of the character's Speed
 
 	IvTotal int // The total IV of the character
 
@@ -90,7 +91,7 @@ func (c *Character) Random() {
 	c.IvDef = ivs[2]
 	c.IvSpAtk = ivs[3]
 	c.IvSpDef = ivs[4]
-	c.IvSpe = ivs[5]
+	c.IvSpd = ivs[5]
 	c.IvTotal = ivs[0] + ivs[1] + ivs[2] + ivs[3] + ivs[4] + ivs[5]
 
 	c.Personality = RandomPersonality()
@@ -98,8 +99,8 @@ func (c *Character) Random() {
 	c.Shiny = rand.Intn(1028) == 1
 }
 
-func (c *Character) Species() {
-
+func (c *Character) Species() string {
+	return "placeholder"
 }
 
 func (c *Character) MaxXP() int {
@@ -116,6 +117,50 @@ func (c *Character) HP() int {
 	} else {
 		return c.MaxHP()
 	}
+}
+
+func (c Character) Format(s fmt.State, verb rune) {
+	var output string
+
+	if c.Shiny {
+		output += "✨ "
+	}
+
+	// Specifying level format based on 'l' or 'L'
+	if s.Flag('l') {
+		output += fmt.Sprintf("Level %d ", c.Level)
+	} else if s.Flag('L') {
+		output += fmt.Sprintf("L%d ", c.Level)
+	}
+
+	if s.Flag('p') {
+		output += fmt.Sprintf("%.2f%% ", c.IvPercentage()) // Assuming IVPercentage is a float
+	}
+
+	if s.Flag('i') && c.Sprite() != "" {
+		output += fmt.Sprintf("%s ", c.Sprite()) // Assuming Sprite is a string or formatted image
+	}
+
+	output += c.Species() // Assuming Species is a string
+
+	if s.Flag('n') && c.Nickname != "" {
+		output += fmt.Sprintf(" \"%s\"", c.Nickname)
+	}
+
+	if s.Flag('f') && c.Favourite {
+		output += " ❤️"
+	}
+
+	fmt.Fprint(s, output)
+}
+
+func (c *Character) IvPercentage() float32 {
+	ivPercentage := c.IvHP/31 + c.IvAtk/31 + c.IvDef/31 + c.IvSpAtk/31 + c.IvSpDef/31 + c.IvSpd/31
+	return float32(ivPercentage) / 6
+}
+
+func (c *Character) Sprite() string {
+	return "sprite"
 }
 
 func (c *Character) SetHP(hp int) {
