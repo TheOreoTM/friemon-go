@@ -60,7 +60,7 @@ func main() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, syscall.SIGTERM)
 	<-sc
 
-	log.Println("Removing commands...")
-	command.Unregister(session, nil)
+	// log.Println("Removing commands...")
+	// command.Unregister(session, nil)
 
 }

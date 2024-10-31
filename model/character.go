@@ -2,10 +2,12 @@ package model
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"time"
 
 	"github.com/theoreotm/gordinal/constants"
+	data "github.com/theoreotm/gordinal/data/character"
 )
 
 type BattleStats struct {
@@ -29,14 +31,14 @@ type Character struct {
 	Personality constants.Personality // The personality of the character
 	Shiny       bool                  // Whether the character is shiny or not
 
-	IvHP  int // The IV of the character's HP
-	IvAtk int // The IV of the character's Attack
-	IvDef int // The IV of the character's Defense
-	// IvSpAtk int // The IV of the character's Sp. Attack - DISABLED
-	// IvSpDef int // The IV of the character's Sp. Defense - DISABLED
-	IvSpd int // The IV of the character's Speed
+	IvHP    int // The IV of the character's HP
+	IvAtk   int // The IV of the character's Attack
+	IvDef   int // The IV of the character's Defense
+	IvSpAtk int // The IV of the character's Sp. Attack - NOT_USED
+	IvSpDef int // The IV of the character's Sp. Defense - NOT_USED
+	IvSpd   int // The IV of the character's Speed
 
-	IvTotal int // The total IV of the character
+	IvTotal float64 // The total IV of the character
 
 	Nickname  string // The nickname of the character
 	Favourite bool   // Whether the character is a favourite or not
@@ -51,7 +53,19 @@ func RandomPersonality() constants.Personality {
 	return constants.Personalities[rand.Intn(len(constants.Personalities))]
 }
 
+func NewCharacter(ownerID string) *Character {
+	c := &Character{}
+	c.OwnerID = ownerID
+	c.ClaimedTimestamp = time.Now()
+
+	c.Random()
+	return c
+}
+
 func (c *Character) Random() {
+	randomId := rand.Intn(len(data.EnabledCharacters()))
+
+	c.CharacterID = data.EnabledCharacters()[randomId].ID
 	ivs := make([]int, 6)
 	for i := range ivs {
 		ivs[i] = rand.Intn(31) + 1
@@ -60,18 +74,28 @@ func (c *Character) Random() {
 	c.IvHP = ivs[0]
 	c.IvAtk = ivs[1]
 	c.IvDef = ivs[2]
-	// c.IvSpAtk = ivs[3]
-	// c.IvSpDef = ivs[4]
+	c.IvSpAtk = ivs[3]
+	c.IvSpDef = ivs[4]
 	c.IvSpd = ivs[5]
-	c.IvTotal = ivs[0] + ivs[1] + ivs[2] + ivs[5]
+	c.IvTotal = float64(ivs[0] + ivs[1] + ivs[2] + ivs[3] + ivs[4] + ivs[5])
 
 	c.Personality = RandomPersonality()
 
 	c.Shiny = rand.Intn(1028) == 1
 }
 
-func (c *Character) Species() string {
-	return "placeholder"
+func (c *Character) CharacterName() string {
+	return c.Data().Name
+}
+
+func (c *Character) Data() data.BaseCharacter {
+	for _, character := range data.EnabledCharacters() {
+		if character.ID == c.CharacterID {
+			return character
+		}
+	}
+
+	return data.BaseCharacter{}
 }
 
 func (c *Character) MaxXP() int {
@@ -79,7 +103,7 @@ func (c *Character) MaxXP() int {
 }
 
 func (c *Character) MaxHP() int {
-	return (2*45 + c.IvHP + 5) * c.Level // TODO: Change 45 to base hp stat
+	return (2*c.Data().HP + c.IvHP + 5) * c.Level // TODO: Change 45 to base hp stat
 }
 
 func (c *Character) HP() int {
@@ -90,21 +114,41 @@ func (c *Character) HP() int {
 	}
 }
 
-func (c Character) String() string {
-	output := ""
-	if c.Shiny {
-		output += "✨ "
-	}
-	output += fmt.Sprintf("Level %d ", c.Level)
-	output += c.Species()
-	if c.Nickname != "" {
-		output += fmt.Sprintf(" \"%s\"", c.Nickname)
-	}
-	if c.Favourite {
-		output += " ❤️"
-	}
-	return output
+func (c *Character) Atk() int {
+	return calcStat(c, "atk")
 }
+
+func (c *Character) Def() int {
+	return calcStat(c, "def")
+}
+
+func (c *Character) SpAtk() int {
+	return calcStat(c, "satk")
+}
+
+func (c *Character) SpDef() int {
+	return calcStat(c, "sdef")
+}
+
+func (c *Character) Spd() int {
+	return calcStat(c, "spd")
+}
+
+// func (c Character) String() string {
+// 	output := ""
+// 	if c.Shiny {
+// 		output += "✨ "
+// 	}
+// 	output += fmt.Sprintf("Level %d ", c.Level)
+// 	output += c.CharacterName()
+// 	if c.Nickname != "" {
+// 		output += fmt.Sprintf(" \"%s\"", c.Nickname)
+// 	}
+// 	if c.Favourite {
+// 		output += " ❤️"
+// 	}
+// 	return output
+// }
 
 func (c Character) Format(spec string) string {
 	var output string
@@ -127,7 +171,7 @@ func (c Character) Format(spec string) string {
 		output += fmt.Sprintf("%s ", c.Sprite())
 	}
 
-	output += c.Species() // Assume Species() returns a string
+	output += c.CharacterName() // Assume Species() returns a string
 
 	if contains(spec, 'n') && c.Nickname != "" {
 		output += fmt.Sprintf(" \"%s\"", c.Nickname)
@@ -140,18 +184,9 @@ func (c Character) Format(spec string) string {
 	return output
 }
 
-// contains checks if a rune exists in the spec string.
-func contains(spec string, flag rune) bool {
-	for _, ch := range spec {
-		if ch == flag {
-			return true
-		}
-	}
-	return false
-}
-func (c *Character) IvPercentage() float32 {
-	ivPercentage := c.IvHP/31 + c.IvAtk/31 + c.IvDef/31 + c.IvSpd/31
-	return float32(ivPercentage) / 4
+func (c *Character) IvPercentage() float64 {
+	fmt.Println(float64(c.IvTotal / 186))
+	return float64(c.IvTotal / 186)
 }
 
 func (c *Character) Sprite() string {
@@ -171,4 +206,67 @@ func (c *Character) InitializeBattleStats() {
 
 func (c *Character) ResetBattleStats() {
 	c.BattleStats = nil
+}
+
+// contains checks if a rune exists in the spec string.
+func contains(spec string, flag rune) bool {
+	for _, ch := range spec {
+		if ch == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func calcStat(character *Character, stat string) int {
+	base := character.Data()
+
+	var iv int
+	var baseStat int
+
+	switch stat {
+	case "atk":
+		iv = character.IvAtk
+		baseStat = base.Atk
+	case "def":
+		iv = character.IvDef
+		baseStat = base.Def
+	case "sdef":
+		iv = character.IvSpDef
+		baseStat = base.SpDef
+	case "satk":
+		iv = character.IvSpAtk
+		baseStat = base.SpAtk
+	case "spd":
+		iv = character.IvSpd
+		baseStat = base.Spd
+	default:
+		iv = 0
+		baseStat = 0
+	}
+
+	calculated := float64((2*baseStat+iv+5)*calcPower(character.Level)) * getPersonalityMultiplier(character.Personality, stat)
+
+	return int(math.Floor(calculated))
+}
+
+func calcPower(level int) int {
+	return level/100 + 5
+}
+
+// getPersonalityMultiplier returns the multiplier for the given personality and stat.
+func getPersonalityMultiplier(p constants.Personality, stat string) float64 {
+	// Access the multipliers for the provided personality
+	multipliers, exists := constants.PersonalityStatMultipliers[p]
+	if !exists {
+		return 1.0 // Return a default multiplier of 1 if the personality does not exist
+	}
+
+	// Return the multiplier for the specified stat
+	multiplier, exists := multipliers[stat]
+	if !exists {
+		return 1.0 // Return a default multiplier of 1 if the stat does not exist
+	}
+
+	return multiplier
 }

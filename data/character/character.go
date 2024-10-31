@@ -24,8 +24,8 @@ func (bc BaseCharacter) GetBaseStats() (int, int, int, int, int, int) {
 }
 
 // NewBaseCharacter is a constructor for creating a new BaseCharacter.
-func NewBaseCharacter(id int, name string, types []string, hp, atk, def, spAtk, spDef, spd int) *BaseCharacter {
-	return &BaseCharacter{
+func NewBaseCharacter(id int, name string, types []string, hp, atk, def, spAtk, spDef, spd int) BaseCharacter {
+	return BaseCharacter{
 		ID:    id,
 		Name:  name,
 		HP:    hp,
@@ -40,8 +40,16 @@ func NewBaseCharacter(id int, name string, types []string, hp, atk, def, spAtk, 
 	}
 }
 
-func EnabledCharacters() []IBaseCharacter {
-	return []IBaseCharacter{
+func EnabledCharacters() []BaseCharacter {
+	return []BaseCharacter{
 		Frieren,
+		Himmel,
+		Eisen,
+		Heiter,
+		Stark,
+		Fern,
+		Flamme,
+		Serie,
+		Sein,
 	}
 }

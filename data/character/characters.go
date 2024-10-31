@@ -12,7 +12,7 @@ var Fern = NewBaseCharacter(9, "Fern", types(Psychic, ""), 95, 60, 60, 101, 60, 
 
 func types(type0, type1 string) []string {
 	if type1 == "" {
-		return []string{type0}
+		return []string{type0, ""}
 	}
 
 	return []string{type0, type1}
