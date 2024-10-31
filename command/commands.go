@@ -76,13 +76,14 @@ func Register(s *discordgo.Session, appid string) error {
 }
 
 func Unregister(s *discordgo.Session, guildID *string) {
-	cmds, err := s.ApplicationCommands("1109691974648332378", "1138806085352951950")
+	cmds, err := s.ApplicationCommands("1109691974648332378", "")
 	if err != nil {
 		lit.Error(err.Error())
 		return
 	}
 	for _, command := range cmds {
-		err := s.ApplicationCommandDelete("1109691974648332378", "1138806085352951950", command.ID)
+		fmt.Printf("Deleting %s\n", command.Name)
+		err := s.ApplicationCommandDelete("1109691974648332378", "", command.ID)
 		if err != nil {
 			lit.Error("Cannot delete '%v' command: %v", command.Name, err)
 		}
