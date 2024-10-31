@@ -185,7 +185,6 @@ func (c Character) Format(spec string) string {
 }
 
 func (c *Character) IvPercentage() float64 {
-	fmt.Println(float64(c.IvTotal / 186))
 	return float64(c.IvTotal / 186)
 }
 
