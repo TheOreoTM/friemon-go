@@ -184,6 +184,7 @@ func (c Character) Format(spec string) string {
 	return output
 }
 
+// returns the percentage of the character's IVs. Eg: 0.75 for a character with 75% IV
 func (c *Character) IvPercentage() float64 {
 	return float64(c.IvTotal / 186)
 }

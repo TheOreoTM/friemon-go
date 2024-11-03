@@ -1,15 +1,19 @@
-module github.com/theoreotm/gordinal
+module github.com/theoreotm/friemon
 
 go 1.22.0
 
 require (
-	github.com/bwmarrin/discordgo v0.27.1
-	github.com/bwmarrin/lit v0.0.0-20190813132558-fd4b44871312
-	github.com/peterbourgon/ff/v3 v3.4.0
+	github.com/disgoorg/disgo v0.18.13
+	github.com/disgoorg/json v1.2.0
+	github.com/disgoorg/paginator v0.0.0-20240725182907-1bdf780b5586
+	github.com/disgoorg/snowflake/v2 v2.0.3
+	github.com/pelletier/go-toml/v2 v2.2.3
+	github.com/theoreotm/gordinal v0.0.0-20241031195943-7cdeb9a8ee04
 )
 
 require (
-	github.com/gorilla/websocket v1.4.2 // indirect
-	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
-	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/sasha-s/go-csync v0.0.0-20240107134140-fcbab37b09ad // indirect
+	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 )
