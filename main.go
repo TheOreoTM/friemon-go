@@ -34,14 +34,19 @@ func main() {
 	}
 
 	setupLogger(cfg.Log)
-	slog.Info("Starting bot-template...", slog.String("version", version), slog.String("commit", commit))
+	slog.Info("Starting friemon...", slog.String("version", version), slog.String("commit", commit))
 	slog.Info("Syncing commands", slog.Bool("sync", *shouldSyncCommands))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
 	b := friemon.New(*cfg, version, commit)
 
 	h := handler.New()
 	h.Command("/test", commands.TestHandler)
 	h.Autocomplete("/test", commands.TestAutocompleteHandler)
+	h.Command("/character", commands.CharacterHandler(b))
+	h.Command("/list", commands.ListHandler(b))
 	h.Command("/version", commands.VersionHandler(b))
 	h.Component("/test-button", components.TestComponent)
 
@@ -63,8 +68,6 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	if err = b.Client.OpenGateway(ctx); err != nil {
 		slog.Error("Failed to open gateway", slog.Any("err", err))
 		os.Exit(-1)

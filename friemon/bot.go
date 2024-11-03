@@ -3,6 +3,7 @@ package friemon
 import (
 	"context"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/disgoorg/disgo"
@@ -12,24 +13,38 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/paginator"
+	"github.com/theoreotm/friemon/friemon/db"
 )
 
 func New(cfg Config, version string, commit string) *Bot {
-	return &Bot{
+	b := &Bot{
 		Cfg:       cfg,
 		Paginator: paginator.New(),
 		Version:   version,
 		Commit:    commit,
 	}
+
+	db, conn, err := db.NewDB(cfg.Database)
+	if err != nil {
+		slog.Error("failed to initialize database: %v", slog.String("err", err.Error()))
+		os.Exit(-1)
+	}
+	defer conn.Close(context.Background())
+
+	slog.Info("Connected to database", slog.String("database", cfg.Database.String()))
+
+	b.Database = db
+
+	return b
 }
 
 type Bot struct {
 	Cfg       Config
 	Client    bot.Client
 	Paginator *paginator.Manager
-
-	Version string
-	Commit  string
+	Database  *db.Queries
+	Version   string
+	Commit    string
 }
 
 func (b *Bot) SetupBot(listeners ...bot.EventListener) error {

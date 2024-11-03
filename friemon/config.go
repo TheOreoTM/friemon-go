@@ -7,6 +7,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/pelletier/go-toml/v2"
+	"github.com/theoreotm/friemon/friemon/db"
 )
 
 func LoadConfig(path string) (*Config, error) {
@@ -23,8 +24,9 @@ func LoadConfig(path string) (*Config, error) {
 }
 
 type Config struct {
-	Log LogConfig `toml:"log"`
-	Bot BotConfig `toml:"bot"`
+	Log      LogConfig `toml:"log"`
+	Bot      BotConfig `toml:"bot"`
+	Database db.Config `toml:"database"`
 }
 
 type BotConfig struct {
