@@ -10,13 +10,13 @@ import (
 	"time"
 )
 
-const createCharacterForUser = `-- name: CreateCharacterForUser :one
+const createCharacter = `-- name: createCharacter :one
 INSERT INTO characters (id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color)
 VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 RETURNING id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color
 `
 
-type CreateCharacterForUserParams struct {
+type createCharacterParams struct {
 	OwnerID          string    `json:"owner_id"`
 	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
 	Idx              int32     `json:"idx"`
@@ -39,8 +39,8 @@ type CreateCharacterForUserParams struct {
 	Color            int32     `json:"color"`
 }
 
-func (q *Queries) CreateCharacterForUser(ctx context.Context, arg CreateCharacterForUserParams) (Character, error) {
-	row := q.db.QueryRow(ctx, createCharacterForUser,
+func (q *Queries) createCharacter(ctx context.Context, arg createCharacterParams) (Character, error) {
+	row := q.db.QueryRow(ctx, createCharacter,
 		arg.OwnerID,
 		arg.ClaimedTimestamp,
 		arg.Idx,
@@ -89,11 +89,11 @@ func (q *Queries) CreateCharacterForUser(ctx context.Context, arg CreateCharacte
 	return i, err
 }
 
-const getCharactersForUser = `-- name: GetCharactersForUser :many
+const getCharactersForUser = `-- name: getCharactersForUser :many
 SELECT id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color FROM characters WHERE owner_id = $1
 `
 
-func (q *Queries) GetCharactersForUser(ctx context.Context, ownerID string) ([]Character, error) {
+func (q *Queries) getCharactersForUser(ctx context.Context, ownerID string) ([]Character, error) {
 	rows, err := q.db.Query(ctx, getCharactersForUser, ownerID)
 	if err != nil {
 		return nil, err

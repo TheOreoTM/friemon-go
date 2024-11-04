@@ -15,17 +15,9 @@ var list = discord.SlashCommandCreate{
 
 func ListHandler(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
-		characters, err := b.Database.GetCharactersForUser(e.Ctx, e.Member().User.ID.String())
-		if err != nil {
-			return err
-		}
-
-		for _, character := range characters {
-			fmt.Println(character.ID)
-		}
 
 		return e.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("Check console, you have %d characters", len(characters)),
+			Content: fmt.Sprintf("Check console, you have %d characters", len("")),
 		})
 	}
 }

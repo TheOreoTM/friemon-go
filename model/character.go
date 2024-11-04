@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/theoreotm/gordinal/constants"
-	data "github.com/theoreotm/gordinal/data/character"
+	"github.com/theoreotm/friemon/constants"
+	data "github.com/theoreotm/friemon/data/character"
 )
 
 type BattleStats struct {
@@ -269,4 +269,27 @@ func getPersonalityMultiplier(p constants.Personality, stat string) float64 {
 	}
 
 	return multiplier
+}
+
+type createCharacterParams struct {
+	OwnerID          string    `json:"owner_id"`
+	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
+	Idx              int32     `json:"idx"`
+	CharacterID      int32     `json:"character_id"`
+	Level            int32     `json:"level"`
+	Xp               int32     `json:"xp"`
+	Personality      string    `json:"personality"`
+	Shiny            bool      `json:"shiny"`
+	IvHp             int32     `json:"iv_hp"`
+	IvAtk            int32     `json:"iv_atk"`
+	IvDef            int32     `json:"iv_def"`
+	IvSpAtk          int32     `json:"iv_sp_atk"`
+	IvSpDef          int32     `json:"iv_sp_def"`
+	IvSpd            int32     `json:"iv_spd"`
+	IvTotal          float64   `json:"iv_total"`
+	Nickname         string    `json:"nickname"`
+	Favourite        bool      `json:"favourite"`
+	HeldItem         int32     `json:"held_item"`
+	Moves            []int32   `json:"moves"`
+	Color            int32     `json:"color"`
 }
