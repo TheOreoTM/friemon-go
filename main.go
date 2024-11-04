@@ -1,66 +1,100 @@
 package main
 
 import (
+	"context"
 	"flag"
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	"github.com/bwmarrin/discordgo"
-	"github.com/bwmarrin/lit"
-	"github.com/peterbourgon/ff/v3"
-	"github.com/theoreotm/gordinal/command"
+	"github.com/disgoorg/disgo/bot"
+	"github.com/disgoorg/disgo/handler"
+	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/friemon/commands"
+	"github.com/theoreotm/friemon/friemon/components"
+	"github.com/theoreotm/friemon/friemon/handlers"
+)
+
+var (
+	version = "dev"
+	commit  = "unknown"
 )
 
 func main() {
-	fmt.Printf(`
-	______         _   _
-	|  ___|       | | (_)
-	| |_ __ _  ___| |_ _  ___  _ __
-	|  _/ _' |/ __| __| |/ _ \| '_ \
-	| || (_| | (__| |_| | (_) | | | |
-	\_| \__,_|\___|\__|_|\___/|_| |_| %s
-`, "v0.0.1")
+	shouldSyncCommands := flag.Bool("sync-commands", false, "Whether to sync commands to discord")
+	path := flag.String("config", "config.toml", "path to config")
+	flag.Parse()
 
-	fs := flag.NewFlagSet("faction", flag.ExitOnError)
-	token := fs.String("token", "", "Discord Authentication Token")
-	fs.IntVar(&lit.LogLevel, "log-level", 0, "LogLevel (0-3)")
-	if err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("FACT")); err != nil {
-		lit.Error("could not parse flags: %v", err)
-		return
-	}
-
-	session, err := discordgo.New("Bot " + *token)
+	cfg, err := friemon.LoadConfig(*path)
 	if err != nil {
-		fmt.Fprintf(fs.Output(), "Usage of %s:\n", fs.Name())
-		fs.PrintDefaults()
-		log.Println("You must provide a Discord authentication token.")
-		return
+		slog.Error("Failed to read config", slog.Any("err", err))
+		os.Exit(-1)
 	}
 
-	session.Identify.Intents = discordgo.IntentsAllWithoutPrivileged |
-		discordgo.IntentsGuildMembers |
-		discordgo.IntentsGuildMessages
+	setupLogger(cfg.Log)
+	slog.Info("Starting friemon...", slog.String("version", version), slog.String("commit", commit))
+	slog.Info("Syncing commands", slog.Bool("sync", *shouldSyncCommands))
 
-	session.AddHandler(command.OnInteractionCommand)
-	session.AddHandler(command.OnAutocomplete)
-	session.AddHandler(command.OnModalSubmit)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	if err := session.Open(); err != nil {
-		log.Fatalf("error opening connection to Discord: %v", err)
+	b := friemon.New(*cfg, version, commit)
+
+	h := handler.New()
+	h.Command("/test", commands.TestHandler)
+	h.Autocomplete("/test", commands.TestAutocompleteHandler)
+	h.Command("/character", commands.CharacterHandler(b))
+	h.Command("/list", commands.ListHandler(b))
+	h.Command("/version", commands.VersionHandler(b))
+	h.Component("/test-button", components.TestComponent)
+
+	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.MessageHandler(b)); err != nil {
+		slog.Error("Failed to setup bot", slog.Any("err", err))
+		os.Exit(-1)
 	}
-	defer session.Close()
 
-	command.Register(session, session.State.User.ID)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		b.Client.Close(ctx)
+	}()
 
-	log.Println(`Now running. Press CTRL-C to exit.`)
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, syscall.SIGTERM)
-	<-sc
+	if *shouldSyncCommands {
+		slog.Info("Syncing commands", slog.Any("guild_ids", cfg.Bot.DevGuilds))
+		if err = handler.SyncCommands(b.Client, commands.Commands, cfg.Bot.DevGuilds); err != nil {
+			slog.Error("Failed to sync commands", slog.Any("err", err))
+		}
+	}
 
-	// log.Println("Removing commands...")
-	// command.Unregister(session, nil)
+	if err = b.Client.OpenGateway(ctx); err != nil {
+		slog.Error("Failed to open gateway", slog.Any("err", err))
+		os.Exit(-1)
+	}
 
+	slog.Info("Bot is running. Press CTRL-C to exit.")
+	s := make(chan os.Signal, 1)
+	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
+	<-s
+	slog.Info("Shutting down bot...")
+}
+
+func setupLogger(cfg friemon.LogConfig) {
+	opts := &slog.HandlerOptions{
+		AddSource: cfg.AddSource,
+		Level:     cfg.Level,
+	}
+
+	var sHandler slog.Handler
+	switch cfg.Format {
+	case "json":
+		sHandler = slog.NewJSONHandler(os.Stdout, opts)
+	case "text":
+		sHandler = slog.NewTextHandler(os.Stdout, opts)
+	default:
+		slog.Error("Unknown log format", slog.String("format", cfg.Format))
+		os.Exit(-1)
+	}
+	slog.SetDefault(slog.New(sHandler))
 }

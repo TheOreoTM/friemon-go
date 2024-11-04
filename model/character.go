@@ -6,44 +6,44 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/theoreotm/gordinal/constants"
-	data "github.com/theoreotm/gordinal/data/character"
+	"github.com/theoreotm/friemon/constants"
+	data "github.com/theoreotm/friemon/data/character"
 )
 
 type BattleStats struct {
-	CurrentHP int
-	AtkMod    int
-	DefMod    int
-	SpAtkMod  int
-	SpDefMod  int
-	SpeMod    int
+	CurrentHP int32
+	AtkMod    int32
+	DefMod    int32
+	SpAtkMod  int32
+	SpDefMod  int32
+	SpeMod    int32
 }
 
 type Character struct {
 	ID               string    // Database ID
 	OwnerID          string    // Snowflake ID of the owner
 	ClaimedTimestamp time.Time // Timestamp when the character was claimed
-	IDX              int       // Index of the character in the list
+	IDX              int32     // Index of the character in the list
 
-	CharacterID int                   // The unique ID of the character
-	Level       int                   // The level of the character
-	Xp          int                   // The current xp of the character
+	CharacterID int32                 // The unique ID of the character
+	Level       int32                 // The level of the character
+	Xp          int32                 // The current xp of the character
 	Personality constants.Personality // The personality of the character
 	Shiny       bool                  // Whether the character is shiny or not
 
-	IvHP    int // The IV of the character's HP
-	IvAtk   int // The IV of the character's Attack
-	IvDef   int // The IV of the character's Defense
-	IvSpAtk int // The IV of the character's Sp. Attack - NOT_USED
-	IvSpDef int // The IV of the character's Sp. Defense - NOT_USED
-	IvSpd   int // The IV of the character's Speed
+	IvHP    int32 // The IV of the character's HP
+	IvAtk   int32 // The IV of the character's Attack
+	IvDef   int32 // The IV of the character's Defense
+	IvSpAtk int32 // The IV of the character's Sp. Attack - NOT_USED
+	IvSpDef int32 // The IV of the character's Sp. Defense - NOT_USED
+	IvSpd   int32 // The IV of the character's Speed
 
 	IvTotal float64 // The total IV of the character
 
-	Nickname  string // The nickname of the character
-	Favourite bool   // Whether the character is a favourite or not
-	HeldItem  int    // The held item of the character
-	Moves     []int  // The moves of the character TODO: Type this field
+	Nickname  string  // The nickname of the character
+	Favourite bool    // Whether the character is a favourite or not
+	HeldItem  int32   // The held item of the character
+	Moves     []int32 // The moves of the character TODO: Type this field
 	Color     int32
 
 	BattleStats *BattleStats
@@ -63,12 +63,12 @@ func NewCharacter(ownerID string) *Character {
 }
 
 func (c *Character) Random() {
-	randomId := rand.Intn(len(data.EnabledCharacters()))
+	randomId := (rand.Int31n(int32(len(data.EnabledCharacters()))))
 
 	c.CharacterID = data.EnabledCharacters()[randomId].ID
-	ivs := make([]int, 6)
+	ivs := make([]int32, 6)
 	for i := range ivs {
-		ivs[i] = rand.Intn(31) + 1
+		ivs[i] = rand.Int31n(31) + 1
 	}
 
 	c.IvHP = ivs[0]
@@ -98,15 +98,15 @@ func (c *Character) Data() data.BaseCharacter {
 	return data.BaseCharacter{}
 }
 
-func (c *Character) MaxXP() int {
+func (c *Character) MaxXP() int32 {
 	return 250 + 25*c.Level
 }
 
-func (c *Character) MaxHP() int {
+func (c *Character) MaxHP() int32 {
 	return (2*c.Data().HP + c.IvHP + 5) * c.Level // TODO: Change 45 to base hp stat
 }
 
-func (c *Character) HP() int {
+func (c *Character) HP() int32 {
 	if c.BattleStats != nil && c.BattleStats.CurrentHP > 0 {
 		return c.BattleStats.CurrentHP
 	} else {
@@ -114,23 +114,23 @@ func (c *Character) HP() int {
 	}
 }
 
-func (c *Character) Atk() int {
+func (c *Character) Atk() int32 {
 	return calcStat(c, "atk")
 }
 
-func (c *Character) Def() int {
+func (c *Character) Def() int32 {
 	return calcStat(c, "def")
 }
 
-func (c *Character) SpAtk() int {
+func (c *Character) SpAtk() int32 {
 	return calcStat(c, "satk")
 }
 
-func (c *Character) SpDef() int {
+func (c *Character) SpDef() int32 {
 	return calcStat(c, "sdef")
 }
 
-func (c *Character) Spd() int {
+func (c *Character) Spd() int32 {
 	return calcStat(c, "spd")
 }
 
@@ -184,8 +184,8 @@ func (c Character) Format(spec string) string {
 	return output
 }
 
+// returns the percentage of the character's IVs. Eg: 0.75 for a character with 75% IV
 func (c *Character) IvPercentage() float64 {
-	fmt.Println(float64(c.IvTotal / 186))
 	return float64(c.IvTotal / 186)
 }
 
@@ -193,7 +193,7 @@ func (c *Character) Sprite() string {
 	return "sprite"
 }
 
-func (c *Character) SetHP(hp int) {
+func (c *Character) SetHP(hp int32) {
 	if c.BattleStats == nil {
 		c.InitializeBattleStats()
 	}
@@ -218,11 +218,11 @@ func contains(spec string, flag rune) bool {
 	return false
 }
 
-func calcStat(character *Character, stat string) int {
+func calcStat(character *Character, stat string) int32 {
 	base := character.Data()
 
-	var iv int
-	var baseStat int
+	var iv int32
+	var baseStat int32
 
 	switch stat {
 	case "atk":
@@ -247,10 +247,10 @@ func calcStat(character *Character, stat string) int {
 
 	calculated := float64((2*baseStat+iv+5)*calcPower(character.Level)) * getPersonalityMultiplier(character.Personality, stat)
 
-	return int(math.Floor(calculated))
+	return int32(math.Floor(calculated))
 }
 
-func calcPower(level int) int {
+func calcPower(level int32) int32 {
 	return level/100 + 5
 }
 
@@ -269,4 +269,27 @@ func getPersonalityMultiplier(p constants.Personality, stat string) float64 {
 	}
 
 	return multiplier
+}
+
+type createCharacterParams struct {
+	OwnerID          string    `json:"owner_id"`
+	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
+	Idx              int32     `json:"idx"`
+	CharacterID      int32     `json:"character_id"`
+	Level            int32     `json:"level"`
+	Xp               int32     `json:"xp"`
+	Personality      string    `json:"personality"`
+	Shiny            bool      `json:"shiny"`
+	IvHp             int32     `json:"iv_hp"`
+	IvAtk            int32     `json:"iv_atk"`
+	IvDef            int32     `json:"iv_def"`
+	IvSpAtk          int32     `json:"iv_sp_atk"`
+	IvSpDef          int32     `json:"iv_sp_def"`
+	IvSpd            int32     `json:"iv_spd"`
+	IvTotal          float64   `json:"iv_total"`
+	Nickname         string    `json:"nickname"`
+	Favourite        bool      `json:"favourite"`
+	HeldItem         int32     `json:"held_item"`
+	Moves            []int32   `json:"moves"`
+	Color            int32     `json:"color"`
 }

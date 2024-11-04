@@ -5,26 +5,26 @@ type IBaseCharacter interface {
 }
 
 type BaseCharacter struct {
-	ID    int    `json:"id"`
+	ID    int32  `json:"id"`
 	Name  string `json:"name"`
-	HP    int    `json:"hp"`
-	Atk   int    `json:"atk"`
-	Def   int    `json:"def"`
-	SpAtk int    `json:"satk"`
-	SpDef int    `json:"sdef"`
-	Spd   int    `json:"spd"`
+	HP    int32  `json:"hp"`
+	Atk   int32  `json:"atk"`
+	Def   int32  `json:"def"`
+	SpAtk int32  `json:"satk"`
+	SpDef int32  `json:"sdef"`
+	Spd   int32  `json:"spd"`
 
 	Type0 string `json:"type0"`
 	Type1 string `json:"type1"`
 }
 
 // GetBaseStats retrieves the character's base stats.
-func (bc BaseCharacter) GetBaseStats() (int, int, int, int, int, int) {
+func (bc BaseCharacter) GetBaseStats() (int32, int32, int32, int32, int32, int32) {
 	return bc.HP, bc.Atk, bc.Def, bc.SpAtk, bc.SpDef, bc.Spd
 }
 
 // NewBaseCharacter is a constructor for creating a new BaseCharacter.
-func NewBaseCharacter(id int, name string, types []string, hp, atk, def, spAtk, spDef, spd int) BaseCharacter {
+func NewBaseCharacter(id int32, name string, types []string, hp, atk, def, spAtk, spDef, spd int32) BaseCharacter {
 	return BaseCharacter{
 		ID:    id,
 		Name:  name,

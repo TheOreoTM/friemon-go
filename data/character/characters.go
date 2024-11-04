@@ -1,5 +1,22 @@
 package data
 
+const (
+	Normal    = "Normal"
+	Psychic   = "Psychic"
+	Water     = "Water"
+	Fire      = "Fire"
+	Fairy     = "Fairy"
+	Ice       = "Ice"
+	Earth     = "Earth"
+	Steel     = "Steel"
+	Fighting  = "Fighting"
+	Grass     = "Grass"
+	Poison    = "Poison"
+	Lightning = "Lightning"
+	Dark      = "Dark"
+	Dragon    = "Dragon"
+)
+
 var Frieren = NewBaseCharacter(1, "Frieren", types(Ice, Fairy), 73, 67, 75, 81, 100, 109)    // Alolan Ninetails - 0038
 var Himmel = NewBaseCharacter(2, "Himmel", types(Fairy, Steel), 55, 150, 115, 80, 115, 148)  // Zacian - 0888
 var Heiter = NewBaseCharacter(3, "Heiter", types(Fairy, ""), 95, 70, 73, 95, 90, 60)         // Clefable - 0036
