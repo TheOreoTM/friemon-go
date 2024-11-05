@@ -41,7 +41,7 @@ type Move struct {
 	PP              int          // Power Points, the number of times the move can be used
 	CurrentPP       int          // Tracks remaining PP in a battle
 	Priority        int          // Priority level (e.g., 1 for Quick Attack)
-	Effect          EffectType   // The main effect, if any, (e.g., Burn, Paralysis)
+	Effect          *EffectType  // The main effect, if any, (e.g., Burn, Paralysis)
 	SecondaryEffect *EffectType  // Any additional effect (e.g., 10% chance to paralyze)
 	Target          TargetType   // Determines if it targets an opponent, ally, or all
 }
@@ -70,7 +70,7 @@ type moveCreateParams struct {
 	Accuracy        int
 	PP              int
 	Priority        int
-	Effect          EffectType
+	Effect          *EffectType
 	SecondaryEffect *EffectType
 	Target          TargetType
 }
