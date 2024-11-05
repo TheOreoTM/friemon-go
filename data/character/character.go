@@ -16,8 +16,8 @@ type BaseCharacter struct {
 	SpDef int    `json:"sdef"`
 	Spd   int    `json:"spd"`
 
-	Type0 string `json:"type0"`
-	Type1 string `json:"type1"`
+	Type0 Type `json:"type0"`
+	Type1 Type `json:"type1"`
 }
 
 func (bc BaseCharacter) Disabled() {
@@ -30,7 +30,7 @@ func (bc BaseCharacter) GetBaseStats() (int, int, int, int, int, int) {
 }
 
 // NewBaseCharacter is a constructor for creating a new BaseCharacter.
-func NewBaseCharacter(id int, name string, types []string, hp, atk, def, spAtk, spDef, spd int) BaseCharacter {
+func NewBaseCharacter(id int, name string, types []Type, hp, atk, def, spAtk, spDef, spd int) BaseCharacter {
 	for _, ch := range Characters {
 		if ch.ID == id {
 			slog.Error("Character already exists, character wasnt added", slog.Int("existing_id", ch.ID), slog.Int("new_id", id))
