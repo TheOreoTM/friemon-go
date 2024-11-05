@@ -24,6 +24,7 @@ var (
 
 func main() {
 	shouldSyncCommands := flag.Bool("sync-commands", false, "Whether to sync commands to discord")
+	shouldNuke := flag.Bool("nuke", false, "Whether to nuke the database")
 	path := flag.String("config", "config.toml", "path to config")
 	flag.Parse()
 
@@ -65,6 +66,13 @@ func main() {
 		slog.Info("Syncing commands", slog.Any("guild_ids", cfg.Bot.DevGuilds))
 		if err = handler.SyncCommands(b.Client, commands.Commands, cfg.Bot.DevGuilds); err != nil {
 			slog.Error("Failed to sync commands", slog.Any("err", err))
+		}
+	}
+
+	if *shouldNuke {
+		slog.Info("Nuking database")
+		if err = b.Database.DeleteEverything(ctx); err != nil {
+			slog.Error("Failed to nuke database", slog.Any("err", err))
 		}
 	}
 

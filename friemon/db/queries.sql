@@ -14,3 +14,6 @@ UPDATE characters SET owner_id = $2, claimed_timestamp = $3, idx = $4, character
 
 -- name: deleteCharacter :exec
 DELETE FROM characters WHERE id = $1;
+
+-- name: DeleteEverything :exec
+TRUNCATE TABLE characters;
