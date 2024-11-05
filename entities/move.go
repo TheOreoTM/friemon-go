@@ -1,4 +1,4 @@
-package data
+package entities
 
 // StatChanges maps a stat to the modifier, e.g., "Attack" +1
 type StatChanges map[string]int
@@ -32,6 +32,7 @@ type EffectType struct {
 }
 
 type Move struct {
+	ID              int          // ID of the move
 	Name            string       // Name of the move (e.g., "Thunderbolt")
 	Type            Type         // Type of the move (e.g., "Electric")
 	Category        MoveCategory // Physical, Special, or Status
@@ -43,4 +44,33 @@ type Move struct {
 	Effect          EffectType   // The main effect, if any, (e.g., Burn, Paralysis)
 	SecondaryEffect *EffectType  // Any additional effect (e.g., 10% chance to paralyze)
 	Target          TargetType   // Determines if it targets an opponent, ally, or all
+}
+
+func NewMove(id int, name string, params moveCreateParams) Move {
+	return Move{
+		ID:              id,
+		Name:            name,
+		Type:            params.Type,
+		Category:        params.Category,
+		Power:           params.Power,
+		Accuracy:        params.Accuracy,
+		PP:              params.PP,
+		CurrentPP:       params.PP,
+		Priority:        params.Priority,
+		Effect:          params.Effect,
+		SecondaryEffect: params.SecondaryEffect,
+		Target:          params.Target,
+	}
+}
+
+type moveCreateParams struct {
+	Type            Type
+	Category        MoveCategory
+	Power           int
+	Accuracy        int
+	PP              int
+	Priority        int
+	Effect          EffectType
+	SecondaryEffect *EffectType
+	Target          TargetType
 }

@@ -6,26 +6,26 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/constants"
-	"github.com/theoreotm/friemon/model"
+	"github.com/theoreotm/friemon/entities"
 )
 
 var _ Store = (*Queries)(nil)
 
-func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*model.Character, error) {
+func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
 	dbch, err := q.getCharacter(ctx, id)
 	if err != nil {
-		return &model.Character{}, err
+		return &entities.Character{}, err
 	}
 
 	err = q.deleteCharacter(ctx, id)
 	if err != nil {
-		return &model.Character{}, err
+		return &entities.Character{}, err
 	}
 
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch model.Character) (*model.Character, error) {
+func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch entities.Character) (*entities.Character, error) {
 
 	dbch, err := q.updateCharacter(ctx, updateCharacterParams{
 		ID:               uuid.MustParse(ch.ID),
@@ -51,38 +51,38 @@ func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch model.Ch
 		Color:            ch.Color,
 	})
 	if err != nil {
-		return &model.Character{}, err
+		return &entities.Character{}, err
 	}
 
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*model.Character, error) {
+func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
 	dbch, err := q.getCharacter(ctx, id)
 	if err != nil {
-		return &model.Character{}, err
+		return &entities.Character{}, err
 	}
 
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*model.Character, error) {
-	randomChar := model.NewCharacter(ownerID.String())
+func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*entities.Character, error) {
+	randomChar := entities.NewCharacter(ownerID.String())
 	_, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
 	if err != nil {
-		return &model.Character{}, err
+		return &entities.Character{}, err
 	}
 
 	return randomChar, nil
 }
 
-func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) (*[]model.Character, error) {
+func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) (*[]entities.Character, error) {
 	dbchs, err := q.getCharactersForUser(ctx, userID.String())
 	if err != nil {
 		return nil, err
 	}
 
-	chars := make([]model.Character, 0, len(dbchs))
+	chars := make([]entities.Character, 0, len(dbchs))
 	for _, dbch := range dbchs {
 		chars = append(chars, *dbCharToModelChar(dbch))
 	}
@@ -107,7 +107,7 @@ func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID)
 // 	return sort == "asc" || sort == "desc"
 // }
 
-func modelCharToDBChar(ch *model.Character) createCharacterParams {
+func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 	return createCharacterParams{
 		OwnerID:          ch.OwnerID,
 		ClaimedTimestamp: ch.ClaimedTimestamp,
@@ -132,8 +132,8 @@ func modelCharToDBChar(ch *model.Character) createCharacterParams {
 	}
 }
 
-func dbCharToModelChar(dbch Character) *model.Character {
-	return &model.Character{
+func dbCharToModelChar(dbch Character) *entities.Character {
+	return &entities.Character{
 		ID:               dbch.ID.String(),
 		OwnerID:          dbch.OwnerID,
 		ClaimedTimestamp: dbch.ClaimedTimestamp,
