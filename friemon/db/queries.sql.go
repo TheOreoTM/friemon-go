@@ -188,6 +188,24 @@ func (q *Queries) getCharactersForUser(ctx context.Context, ownerID string) ([]C
 	return items, nil
 }
 
+const getUser = `-- name: getUser :one
+SELECT id, balance, selected_id, order_by, order_desc, shinies_caught FROM users WHERE id = $1
+`
+
+func (q *Queries) getUser(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, getUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Balance,
+		&i.SelectedID,
+		&i.OrderBy,
+		&i.OrderDesc,
+		&i.ShiniesCaught,
+	)
+	return i, err
+}
+
 const updateCharacter = `-- name: updateCharacter :one
 UPDATE characters SET owner_id = $2, claimed_timestamp = $3, idx = $4, character_id = $5, level = $6, xp = $7, personality = $8, shiny = $9, iv_hp = $10, iv_atk = $11, iv_def = $12, iv_sp_atk = $13, iv_sp_def = $14, iv_spd = $15, iv_total = $16, nickname = $17, favourite = $18, held_item = $19, moves = $20, color = $21 WHERE id = $1 RETURNING id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color
 `

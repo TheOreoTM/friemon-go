@@ -11,6 +11,24 @@ import (
 
 var _ Store = (*Queries)(nil)
 
+func (q *Queries) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+	dbUser, err := q.getUser(ctx, id.String())
+	if err != nil {
+		return &entities.User{}, err
+	}
+
+	return &entities.User{
+		ID:         id,
+		Balance:    int(dbUser.Balance),
+		SelectedID: dbUser.SelectedID,
+		Order: entities.OrderOptions{
+			OrderBy: int(dbUser.OrderBy),
+			Desc:    dbUser.OrderDesc,
+		},
+		ShiniesCaught: int(dbUser.ShiniesCaught),
+	}, nil
+}
+
 func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
 	dbch, err := q.getCharacter(ctx, id)
 	if err != nil {

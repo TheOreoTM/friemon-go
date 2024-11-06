@@ -33,3 +33,12 @@ type Character struct {
 	Moves            []int32   `json:"moves"`
 	Color            int32     `json:"color"`
 }
+
+type User struct {
+	ID            string    `json:"id"`
+	Balance       int32     `json:"balance"`
+	SelectedID    uuid.UUID `json:"selected_id"`
+	OrderBy       int32     `json:"order_by"`
+	OrderDesc     bool      `json:"order_desc"`
+	ShiniesCaught int32     `json:"shinies_caught"`
+}
