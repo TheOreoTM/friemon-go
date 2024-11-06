@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
@@ -11,22 +13,28 @@ import (
 
 var _ Store = (*Queries)(nil)
 
-func (q *Queries) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
-	dbUser, err := q.getUser(ctx, id.String())
+func (q *Queries) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+	dbUser, err := q.createUser(ctx, id.String())
 	if err != nil {
 		return &entities.User{}, err
 	}
 
-	return &entities.User{
-		ID:         id,
-		Balance:    int(dbUser.Balance),
-		SelectedID: dbUser.SelectedID,
-		Order: entities.OrderOptions{
-			OrderBy: int(dbUser.OrderBy),
-			Desc:    dbUser.OrderDesc,
-		},
-		ShiniesCaught: int(dbUser.ShiniesCaught),
-	}, nil
+	return dbUserToModelUser(dbUser), nil
+}
+
+func (q *Queries) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+	dbUser, err := q.getUser(ctx, id.String())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			dbUser, err := q.createUser(ctx, id.String())
+			if err != nil {
+				return &entities.User{}, err
+			}
+			return dbUserToModelUser(dbUser), nil
+		}
+		return &entities.User{}, err
+	}
+	return dbUserToModelUser(dbUser), nil // Ugly, somehow fix
 }
 
 func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
@@ -124,6 +132,19 @@ func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID)
 // func isValidSort(sort string) bool {
 // 	return sort == "asc" || sort == "desc"
 // }
+
+func dbUserToModelUser(dbUser User) *entities.User {
+	return &entities.User{
+		ID:         snowflake.MustParse(dbUser.ID),
+		Balance:    int(dbUser.Balance),
+		SelectedID: dbUser.SelectedID,
+		Order: entities.OrderOptions{
+			OrderBy: int(dbUser.OrderBy),
+			Desc:    dbUser.OrderDesc,
+		},
+		ShiniesCaught: int(dbUser.ShiniesCaught),
+	}
+}
 
 func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 	return createCharacterParams{

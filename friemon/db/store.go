@@ -17,6 +17,7 @@ type Store interface {
 	DeleteCharacter(context.Context, uuid.UUID) (*entities.Character, error)
 
 	GetUser(context.Context, snowflake.ID) (*entities.User, error)
+	CreateUser(context.Context, snowflake.ID) (*entities.User, error)
 
 	Tx(context.Context, func(Store) error) error
 }

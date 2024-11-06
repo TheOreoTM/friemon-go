@@ -100,6 +100,24 @@ func (q *Queries) createCharacter(ctx context.Context, arg createCharacterParams
 	return i, err
 }
 
+const createUser = `-- name: createUser :one
+INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught
+`
+
+func (q *Queries) createUser(ctx context.Context, id string) (User, error) {
+	row := q.db.QueryRow(ctx, createUser, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Balance,
+		&i.SelectedID,
+		&i.OrderBy,
+		&i.OrderDesc,
+		&i.ShiniesCaught,
+	)
+	return i, err
+}
+
 const deleteCharacter = `-- name: deleteCharacter :exec
 DELETE FROM characters WHERE id = $1
 `

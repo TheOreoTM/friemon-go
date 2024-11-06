@@ -18,5 +18,8 @@ DELETE FROM characters WHERE id = $1;
 -- name: getUser :one
 SELECT * FROM users WHERE id = $1;
 
+-- name: createUser :one
+INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught;
+
 -- name: DeleteEverything :exec
 TRUNCATE TABLE characters;
