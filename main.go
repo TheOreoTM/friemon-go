@@ -49,6 +49,7 @@ func main() {
 	h.Command("/character", commands.CharacterHandler(b))
 	h.Command("/list", commands.ListHandler(b))
 	h.Command("/version", commands.VersionHandler(b))
+	h.Command("/selected", commands.SelectedHandler(b))
 	h.Component("/test-button", components.TestComponent)
 
 	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.MessageHandler(b)); err != nil {
@@ -59,7 +60,10 @@ func main() {
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		b.Client.Close(ctx)
+		err := b.Close(ctx)
+		if err != nil {
+			slog.Error("Failed to close friemon", slog.Any("err", err))
+		}
 	}()
 
 	if *shouldSyncCommands {
@@ -71,7 +75,7 @@ func main() {
 
 	if *shouldNuke {
 		slog.Info("Nuking database")
-		if err = b.Database.DeleteEverything(ctx); err != nil {
+		if err = b.DB.DeleteEverything(ctx); err != nil {
 			slog.Error("Failed to nuke database", slog.Any("err", err))
 		}
 	}

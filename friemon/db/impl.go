@@ -13,6 +13,31 @@ import (
 
 var _ Store = (*Queries)(nil)
 
+func (q *Queries) UpdateUser(ctx context.Context, user entities.User) (*entities.User, error) {
+	dbUser, err := q.updateUser(ctx, updateUserParams{
+		ID:            user.ID.String(),
+		Balance:       int32(user.Balance),
+		SelectedID:    user.SelectedID,
+		OrderBy:       int32(user.Order.OrderBy),
+		OrderDesc:     user.Order.Desc,
+		ShiniesCaught: int32(user.ShiniesCaught),
+	})
+
+	if err != nil {
+		return &entities.User{}, err
+	}
+	return dbUserToModelUser(dbUser), nil
+}
+
+func (q *Queries) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*entities.Character, error) {
+	dbch, err := q.getSelectedCharacter(ctx, id.String())
+	if err != nil {
+		return &entities.Character{}, err
+	}
+
+	return dbCharToModelChar(dbch), nil
+}
+
 func (q *Queries) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
 	dbUser, err := q.createUser(ctx, id.String())
 	if err != nil {
@@ -94,12 +119,22 @@ func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Cha
 
 func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*entities.Character, error) {
 	randomChar := entities.NewCharacter(ownerID.String())
-	_, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
+	user, err := q.GetUser(ctx, ownerID)
+	if err != nil {
+		return &entities.Character{}, err
+	}
+	dbch, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
 	if err != nil {
 		return &entities.Character{}, err
 	}
 
-	return randomChar, nil
+	user.SelectedID = dbch.ID
+	_, err = q.UpdateUser(ctx, *user)
+	if err != nil {
+		return &entities.Character{}, err
+	}
+
+	return dbCharToModelChar(dbch), nil
 }
 
 func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) (*[]entities.Character, error) {

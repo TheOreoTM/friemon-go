@@ -2,6 +2,7 @@ package friemon
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -13,27 +14,28 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/paginator"
+	"github.com/jackc/pgx/v5"
 	"github.com/theoreotm/friemon/friemon/db"
 )
 
 func New(cfg Config, version string, commit string) *Bot {
-	b := &Bot{
-		Cfg:       cfg,
-		Paginator: paginator.New(),
-		Version:   version,
-		Commit:    commit,
-	}
-
 	db, conn, err := db.NewDB(cfg.Database)
 	if err != nil {
 		slog.Error("failed to initialize database: %v", slog.String("err", err.Error()))
 		os.Exit(-1)
 	}
-	defer conn.Close(context.Background())
 
 	slog.Info("Connected to database", slog.String("database", cfg.Database.String()))
 
-	b.Database = db
+	b := &Bot{
+		Cfg:       cfg,
+		Paginator: paginator.New(),
+		Version:   version,
+		Commit:    commit,
+		conn:      conn,
+	}
+
+	b.DB = db
 
 	return b
 }
@@ -42,9 +44,10 @@ type Bot struct {
 	Cfg       Config
 	Client    bot.Client
 	Paginator *paginator.Manager
-	Database  *db.Queries
+	DB        *db.Queries
 	Version   string
 	Commit    string
+	conn      *pgx.Conn
 }
 
 func (b *Bot) SetupBot(listeners ...bot.EventListener) error {
@@ -59,6 +62,18 @@ func (b *Bot) SetupBot(listeners ...bot.EventListener) error {
 	}
 
 	b.Client = client
+	return nil
+}
+
+func (b *Bot) Close(ctx context.Context) error {
+	slog.Info("Closing friemon...")
+	b.Client.Close(ctx)
+	// Close pgx connection
+	slog.Info("Closing pgx connection...")
+	if err := b.conn.Close(ctx); err != nil {
+		return fmt.Errorf("error closing pgx connection: %w", err)
+	}
+
 	return nil
 }
 

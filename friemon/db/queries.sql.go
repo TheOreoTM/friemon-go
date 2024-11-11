@@ -206,6 +206,43 @@ func (q *Queries) getCharactersForUser(ctx context.Context, ownerID string) ([]C
 	return items, nil
 }
 
+const getSelectedCharacter = `-- name: getSelectedCharacter :one
+SELECT id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny,
+       iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite,
+       held_item, moves, color
+FROM characters
+WHERE characters.id = (SELECT selected_id FROM users WHERE users.id = $1)
+`
+
+func (q *Queries) getSelectedCharacter(ctx context.Context, id string) (Character, error) {
+	row := q.db.QueryRow(ctx, getSelectedCharacter, id)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.ClaimedTimestamp,
+		&i.Idx,
+		&i.CharacterID,
+		&i.Level,
+		&i.Xp,
+		&i.Personality,
+		&i.Shiny,
+		&i.IvHp,
+		&i.IvAtk,
+		&i.IvDef,
+		&i.IvSpAtk,
+		&i.IvSpDef,
+		&i.IvSpd,
+		&i.IvTotal,
+		&i.Nickname,
+		&i.Favourite,
+		&i.HeldItem,
+		&i.Moves,
+		&i.Color,
+	)
+	return i, err
+}
+
 const getUser = `-- name: getUser :one
 SELECT id, balance, selected_id, order_by, order_desc, shinies_caught FROM users WHERE id = $1
 `
@@ -299,6 +336,40 @@ func (q *Queries) updateCharacter(ctx context.Context, arg updateCharacterParams
 		&i.HeldItem,
 		&i.Moves,
 		&i.Color,
+	)
+	return i, err
+}
+
+const updateUser = `-- name: updateUser :one
+UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6 WHERE id = $1 RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught
+`
+
+type updateUserParams struct {
+	ID            string    `json:"id"`
+	Balance       int32     `json:"balance"`
+	SelectedID    uuid.UUID `json:"selected_id"`
+	OrderBy       int32     `json:"order_by"`
+	OrderDesc     bool      `json:"order_desc"`
+	ShiniesCaught int32     `json:"shinies_caught"`
+}
+
+func (q *Queries) updateUser(ctx context.Context, arg updateUserParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.ID,
+		arg.Balance,
+		arg.SelectedID,
+		arg.OrderBy,
+		arg.OrderDesc,
+		arg.ShiniesCaught,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Balance,
+		&i.SelectedID,
+		&i.OrderBy,
+		&i.OrderDesc,
+		&i.ShiniesCaught,
 	)
 	return i, err
 }

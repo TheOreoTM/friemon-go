@@ -56,18 +56,20 @@ func NewCharacter(ownerID string) *Character {
 	c := &Character{}
 	c.OwnerID = ownerID
 	c.ClaimedTimestamp = time.Now()
+	c.Level = 1
+	c.HeldItem = -1
 
 	c.Random()
 	return c
 }
 
 func (c *Character) Random() {
-	randomId := (rand.Intn(len(Characters)))
+	randomId := randomInt(1, len(Characters))
 
 	c.CharacterID = Characters[randomId].ID
 	ivs := make([]int, 6)
 	for i := range ivs {
-		ivs[i] = rand.Intn(31) + 1
+		ivs[i] = randomInt(1, 31)
 	}
 
 	c.IvHP = ivs[0]
@@ -80,7 +82,7 @@ func (c *Character) Random() {
 
 	c.Personality = RandomPersonality()
 
-	c.Shiny = rand.Intn(1028) == 1
+	c.Shiny = rand.Intn(1028-1) == 1
 }
 
 func (c *Character) CharacterName() string {
@@ -102,7 +104,7 @@ func (c *Character) MaxXP() int {
 }
 
 func (c *Character) MaxHP() int {
-	return (2*c.Data().HP + c.IvHP + 5) * c.Level // TODO: Change 45 to base hp stat
+	return (2*c.Data().HP+c.IvHP+5)*int(c.Level/100) + c.Level + 10
 }
 
 func (c *Character) HP() int {
@@ -133,21 +135,21 @@ func (c *Character) Spd() int {
 	return calcStat(c, "spd")
 }
 
-// func (c Character) String() string {
-// 	output := ""
-// 	if c.Shiny {
-// 		output += "✨ "
-// 	}
-// 	output += fmt.Sprintf("Level %d ", c.Level)
-// 	output += c.CharacterName()
-// 	if c.Nickname != "" {
-// 		output += fmt.Sprintf(" \"%s\"", c.Nickname)
-// 	}
-// 	if c.Favourite {
-// 		output += " ❤️"
-// 	}
-// 	return output
-// }
+func (c Character) String() string {
+	output := ""
+	if c.Shiny {
+		output += "✨ "
+	}
+	output += fmt.Sprintf("Level %d ", c.Level)
+	output += c.CharacterName()
+	if c.Nickname != "" {
+		output += fmt.Sprintf(" \"%s\"", c.Nickname)
+	}
+	if c.Favourite {
+		output += " ❤️"
+	}
+	return output
+}
 
 func (c Character) Format(spec string) string {
 	var output string
@@ -218,11 +220,12 @@ func contains(spec string, flag rune) bool {
 }
 
 func calcStat(character *Character, stat string) int {
-	base := character.Data()
+	base := character.Data() // Fetch the base stats of the character
 
 	var iv int
 	var baseStat int
 
+	// Set IVs and base stats based on the requested stat
 	switch stat {
 	case "atk":
 		iv = character.IvAtk
@@ -244,14 +247,15 @@ func calcStat(character *Character, stat string) int {
 		baseStat = 0
 	}
 
-	calculated := float64((2*baseStat+iv+5)*calcPower(character.Level)) * getPersonalityMultiplier(character.Personality, stat)
+	// Calculate the stat with the formula and apply personality multiplier
+	calculated := math.Floor((float64(((2*baseStat+iv+5)*character.Level)/100 + 5)) * getPersonalityMultiplier(character.Personality, stat))
 
-	return int(math.Floor(calculated))
+	return int(calculated)
 }
 
-func calcPower(level int) int {
-	return level/100 + 5
-}
+// func calcPower(level int) int {
+// 	return level/100 + 5
+// }
 
 // getPersonalityMultiplier returns the multiplier for the given personality and stat.
 func getPersonalityMultiplier(p constants.Personality, stat string) float64 {
@@ -268,4 +272,8 @@ func getPersonalityMultiplier(p constants.Personality, stat string) float64 {
 	}
 
 	return multiplier
+}
+
+func randomInt(min, max int) int {
+	return rand.Intn(max-min) + min
 }
