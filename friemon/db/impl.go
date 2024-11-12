@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
@@ -95,7 +94,7 @@ func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.
 func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch entities.Character) (*entities.Character, error) {
 
 	dbch, err := q.updateCharacter(ctx, updateCharacterParams{
-		ID:               uuid.MustParse(ch.ID),
+		ID:               (ch.ID),
 		OwnerID:          ch.OwnerID,
 		ClaimedTimestamp: ch.ClaimedTimestamp,
 		Idx:              int32(ch.IDX),
@@ -141,7 +140,6 @@ func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*e
 	}
 
 	randomChar.IDX = user.NextIdx
-	fmt.Println(randomChar.IDX, user.NextIdx)
 
 	dbch, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
 	if err != nil {
@@ -213,7 +211,7 @@ func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 
 func dbCharToModelChar(dbch Character) *entities.Character {
 	return &entities.Character{
-		ID:               dbch.ID.String(),
+		ID:               dbch.ID,
 		OwnerID:          dbch.OwnerID,
 		ClaimedTimestamp: dbch.ClaimedTimestamp,
 		IDX:              int(dbch.Idx),

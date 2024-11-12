@@ -1,6 +1,8 @@
 package entities
 
-import "log/slog"
+import (
+	"log/slog"
+)
 
 type IBaseCharacter interface {
 	GetBaseStats() (int, int, int, int, int, int)
@@ -18,6 +20,8 @@ type BaseCharacter struct {
 
 	Type0 Type `json:"type0"`
 	Type1 Type `json:"type1"`
+
+	Emoji string `json:"emoji"` // The id of the emoji in the application
 }
 
 func (bc BaseCharacter) Disabled() {
@@ -27,6 +31,10 @@ func (bc BaseCharacter) Disabled() {
 // GetBaseStats retrieves the character's base stats.
 func (bc BaseCharacter) GetBaseStats() (int, int, int, int, int, int) {
 	return bc.HP, bc.Atk, bc.Def, bc.SpAtk, bc.SpDef, bc.Spd
+}
+
+func (bc BaseCharacter) GetEmoji() string {
+	return bc.Emoji
 }
 
 // NewBaseCharacter is a constructor for creating a new BaseCharacter.
@@ -55,6 +63,8 @@ func NewBaseCharacter(id int, name string, types []Type, hp, atk, def, spAtk, sp
 
 		Type0: types[0],
 		Type1: types[1],
+
+		Emoji: "",
 	}
 
 	Characters[id] = c

@@ -131,10 +131,10 @@ const (
 )
 
 const (
-	ColorSuccess Color = 0x46b485
-	ColorFail    Color = 0xf05050
-	ColorWarn    Color = 0xfee65c
-	ColorInfo    Color = 0x297bd1
-	ColorLoading Color = 0x23272a
-	ColorDefault Color = 0x2b2d31
+	ColorSuccess int = 0x46b485
+	ColorFail    int = 0xf05050
+	ColorWarn    int = 0xfee65c
+	ColorInfo    int = 0x297bd1
+	ColorLoading int = 0x23272a
+	ColorDefault int = 0x2b2d31
 )

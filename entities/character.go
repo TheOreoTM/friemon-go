@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/constants"
 )
 
@@ -19,7 +20,7 @@ type BattleStats struct {
 }
 
 type Character struct {
-	ID               string    // Database ID
+	ID               uuid.UUID // Database ID
 	OwnerID          string    // Snowflake ID of the owner
 	ClaimedTimestamp time.Time // Timestamp when the character was claimed
 	IDX              int       // Index of the character in the list
@@ -81,7 +82,7 @@ func (c *Character) Random() {
 	c.IvTotal = float64(ivs[0] + ivs[1] + ivs[2] + ivs[3] + ivs[4] + ivs[5])
 
 	c.Personality = RandomPersonality()
-
+	c.Level = int(math.Min(math.Max(float64(int(normalRandom(20, 10))), 1), 100))
 	c.Shiny = rand.Intn(1028-1) == 1
 }
 
@@ -192,7 +193,12 @@ func (c *Character) IvPercentage() string {
 }
 
 func (c *Character) Sprite() string {
-	return "🤖"
+	emoji, ok := CharacterSprites[c.Data()]
+	if ok {
+		return fmt.Sprintf("<:character:%v>", emoji)
+	}
+
+	return "❔"
 }
 
 func (c *Character) SetHP(hp int) {
@@ -277,4 +283,8 @@ func getPersonalityMultiplier(p constants.Personality, stat string) float64 {
 
 func randomInt(min, max int) int {
 	return rand.Intn(max-min) + min
+}
+
+func normalRandom(mean, stddev float64) float64 {
+	return rand.NormFloat64()*stddev + mean
 }

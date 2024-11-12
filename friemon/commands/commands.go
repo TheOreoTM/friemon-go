@@ -37,7 +37,7 @@ func InfoMessage(message string) discord.MessageCreate {
 	}
 }
 
-func SimpleEmbed(title, desc string, color constants.Color) discord.Embed {
+func SimpleEmbed(title, desc string, color int) discord.Embed {
 	return discord.Embed{
 		Title:       title,
 		Description: desc,

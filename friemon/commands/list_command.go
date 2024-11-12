@@ -8,6 +8,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/paginator"
+	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/entities"
 	"github.com/theoreotm/friemon/friemon"
 )
@@ -32,6 +33,11 @@ func ListHandler(b *friemon.Bot) handler.CommandHandler {
 			return e.CreateMessage(ErrorMessage("You don't have any characters"))
 		}
 
+		dbUser, err := b.DB.GetUser(e.Ctx, e.Member().User.ID)
+		if err != nil {
+			return e.CreateMessage(ErrorMessage(err.Error()))
+		}
+
 		return b.Paginator.Create(e.Respond, paginator.Pages{
 			ID: e.ID().String(),
 			PageFunc: func(page int, embed *discord.EmbedBuilder) {
@@ -39,7 +45,7 @@ func ListHandler(b *friemon.Bot) handler.CommandHandler {
 				characterEnd := characterStart + characterPerPage
 
 				if characterEnd > len(characters) {
-					characterEnd = len(characters) - 1
+					characterEnd = len(characters)
 				}
 
 				charactersInPage := characters[characterStart:characterEnd]
@@ -55,11 +61,19 @@ func ListHandler(b *friemon.Bot) handler.CommandHandler {
 					character := charactersInPage[i]
 					idx := padIdx(character.IDX, len(fmt.Sprint(highestIdx)))
 					name := character.Format("inf")
+					if character.ID == dbUser.SelectedID {
+						idx = fmt.Sprintf("**`%v`**", idx)
+					} else {
+						idx = fmt.Sprintf("`%v`", idx)
+					}
 
-					description += fmt.Sprintf("`%v`　%v　•　Lvl. %v　•　%v\n", idx, name, character.Level, character.IvPercentage())
+					description += fmt.Sprintf("%v　%v　•　Lvl. %v　•　%v\n", idx, name, character.Level, character.IvPercentage())
 				}
 				embed.SetDescription(description)
+				embed.SetColor(constants.ColorDefault)
+				embed.SetFooterTextf("Showing entries %v-%v out of %v", characterStart+1, characterEnd, len(characters))
 			},
+
 			Pages:      int(math.Ceil(float64(len(characters)) / characterPerPage)),
 			Creator:    e.User().ID,
 			ExpireMode: paginator.ExpireModeAfterLastUsage,
