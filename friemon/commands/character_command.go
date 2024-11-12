@@ -23,7 +23,7 @@ func CharacterHandler(b *friemon.Bot) handler.CommandHandler {
 		}
 
 		return e.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("IV percent %.2f for %v | %v", ch.IvPercentage()*100, ch.IvTotal, ch.Data().Name),
+			Content: fmt.Sprintf("IV percent %v for %v | %v", ch.IvPercentage(), ch.IvTotal, ch.Data().Name),
 		})
 	}
 }

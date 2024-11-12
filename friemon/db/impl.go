@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
@@ -13,6 +14,20 @@ import (
 
 var _ Store = (*Queries)(nil)
 
+func (q *Queries) DeleteEverything(ctx context.Context) error {
+	err := q.deleteUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = q.deleteCharacters(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (q *Queries) UpdateUser(ctx context.Context, user entities.User) (*entities.User, error) {
 	dbUser, err := q.updateUser(ctx, updateUserParams{
 		ID:            user.ID.String(),
@@ -21,6 +36,7 @@ func (q *Queries) UpdateUser(ctx context.Context, user entities.User) (*entities
 		OrderBy:       int32(user.Order.OrderBy),
 		OrderDesc:     user.Order.Desc,
 		ShiniesCaught: int32(user.ShiniesCaught),
+		NextIdx:       int32(user.NextIdx),
 	})
 
 	if err != nil {
@@ -123,12 +139,17 @@ func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*e
 	if err != nil {
 		return &entities.Character{}, err
 	}
+
+	randomChar.IDX = user.NextIdx
+	fmt.Println(randomChar.IDX, user.NextIdx)
+
 	dbch, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
 	if err != nil {
 		return &entities.Character{}, err
 	}
 
 	user.SelectedID = dbch.ID
+	user.NextIdx++
 	_, err = q.UpdateUser(ctx, *user)
 	if err != nil {
 		return &entities.Character{}, err
@@ -137,7 +158,7 @@ func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*e
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) (*[]entities.Character, error) {
+func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
 	dbchs, err := q.getCharactersForUser(ctx, userID.String())
 	if err != nil {
 		return nil, err
@@ -148,25 +169,8 @@ func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID)
 		chars = append(chars, *dbCharToModelChar(dbch))
 	}
 
-	return &chars, nil
+	return chars, nil
 }
-
-// func isValidOrderBy(orderBy string) bool {
-// 	return orderBy == "idx" || orderBy == "level" || orderBy == "xp" || orderBy == "iv_total"
-// }
-
-// func isValidFilter(filter []string) bool {
-// 	for _, f := range filter {
-// 		if f != "shiny" && f != "favourite" && f != "held_item" && f != "moves" {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
-
-// func isValidSort(sort string) bool {
-// 	return sort == "asc" || sort == "desc"
-// }
 
 func dbUserToModelUser(dbUser User) *entities.User {
 	return &entities.User{
@@ -178,6 +182,7 @@ func dbUserToModelUser(dbUser User) *entities.User {
 			Desc:    dbUser.OrderDesc,
 		},
 		ShiniesCaught: int(dbUser.ShiniesCaught),
+		NextIdx:       int(dbUser.NextIdx),
 	}
 }
 

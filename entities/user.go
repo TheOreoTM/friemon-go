@@ -23,5 +23,6 @@ type User struct {
 	Balance       int
 	SelectedID    uuid.UUID
 	Order         OrderOptions
+	NextIdx       int
 	ShiniesCaught int
 }

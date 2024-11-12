@@ -19,10 +19,10 @@ DELETE FROM characters WHERE id = $1;
 SELECT * FROM users WHERE id = $1;
 
 -- name: updateUser :one
-UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6 WHERE id = $1 RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught;
+UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6, next_idx = $7 WHERE id = $1 RETURNING *;
 
 -- name: createUser :one
-INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught;
+INSERT INTO users (id) VALUES ($1) RETURNING *;
 
 -- name: getSelectedCharacter :one
 SELECT id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny,
@@ -31,5 +31,8 @@ SELECT id, owner_id, claimed_timestamp, idx, character_id, level, xp, personalit
 FROM characters
 WHERE characters.id = (SELECT selected_id FROM users WHERE users.id = $1);
 
--- name: DeleteEverything :exec
-TRUNCATE TABLE characters;
+-- name: deleteUsers :exec
+DELETE FROM users;
+
+-- name: deleteCharacters :exec
+DELETE FROM characters;

@@ -165,14 +165,14 @@ func (c Character) Format(spec string) string {
 	}
 
 	if contains(spec, 'p') {
-		output += fmt.Sprintf("%.2f%% ", c.IvPercentage())
+		output += c.IvPercentage()
 	}
 
 	if contains(spec, 'i') && c.Sprite() != "" {
 		output += fmt.Sprintf("%s ", c.Sprite())
 	}
 
-	output += c.CharacterName() // Assume Species() returns a string
+	output += fmt.Sprintf("**%s**", c.CharacterName())
 
 	if contains(spec, 'n') && c.Nickname != "" {
 		output += fmt.Sprintf(" \"%s\"", c.Nickname)
@@ -186,12 +186,13 @@ func (c Character) Format(spec string) string {
 }
 
 // returns the percentage of the character's IVs. Eg: 0.75 for a character with 75% IV
-func (c *Character) IvPercentage() float64 {
-	return float64(c.IvTotal / 186)
+func (c *Character) IvPercentage() string {
+	percentage := float64((c.IvTotal / 186) * 100)
+	return fmt.Sprintf("%.2f", percentage) + "%"
 }
 
 func (c *Character) Sprite() string {
-	return "sprite"
+	return "🤖"
 }
 
 func (c *Character) SetHP(hp int) {

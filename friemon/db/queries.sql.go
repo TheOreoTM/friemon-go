@@ -12,15 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const deleteEverything = `-- name: DeleteEverything :exec
-TRUNCATE TABLE characters
-`
-
-func (q *Queries) DeleteEverything(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, deleteEverything)
-	return err
-}
-
 const createCharacter = `-- name: createCharacter :one
 INSERT INTO characters (id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color)
 VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
@@ -101,7 +92,7 @@ func (q *Queries) createCharacter(ctx context.Context, arg createCharacterParams
 }
 
 const createUser = `-- name: createUser :one
-INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught
+INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx
 `
 
 func (q *Queries) createUser(ctx context.Context, id string) (User, error) {
@@ -114,6 +105,7 @@ func (q *Queries) createUser(ctx context.Context, id string) (User, error) {
 		&i.OrderBy,
 		&i.OrderDesc,
 		&i.ShiniesCaught,
+		&i.NextIdx,
 	)
 	return i, err
 }
@@ -124,6 +116,24 @@ DELETE FROM characters WHERE id = $1
 
 func (q *Queries) deleteCharacter(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteCharacter, id)
+	return err
+}
+
+const deleteCharacters = `-- name: deleteCharacters :exec
+DELETE FROM characters
+`
+
+func (q *Queries) deleteCharacters(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteCharacters)
+	return err
+}
+
+const deleteUsers = `-- name: deleteUsers :exec
+DELETE FROM users
+`
+
+func (q *Queries) deleteUsers(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteUsers)
 	return err
 }
 
@@ -244,7 +254,7 @@ func (q *Queries) getSelectedCharacter(ctx context.Context, id string) (Characte
 }
 
 const getUser = `-- name: getUser :one
-SELECT id, balance, selected_id, order_by, order_desc, shinies_caught FROM users WHERE id = $1
+SELECT id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx FROM users WHERE id = $1
 `
 
 func (q *Queries) getUser(ctx context.Context, id string) (User, error) {
@@ -257,6 +267,7 @@ func (q *Queries) getUser(ctx context.Context, id string) (User, error) {
 		&i.OrderBy,
 		&i.OrderDesc,
 		&i.ShiniesCaught,
+		&i.NextIdx,
 	)
 	return i, err
 }
@@ -341,7 +352,7 @@ func (q *Queries) updateCharacter(ctx context.Context, arg updateCharacterParams
 }
 
 const updateUser = `-- name: updateUser :one
-UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6 WHERE id = $1 RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught
+UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6, next_idx = $7 WHERE id = $1 RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx
 `
 
 type updateUserParams struct {
@@ -351,6 +362,7 @@ type updateUserParams struct {
 	OrderBy       int32     `json:"order_by"`
 	OrderDesc     bool      `json:"order_desc"`
 	ShiniesCaught int32     `json:"shinies_caught"`
+	NextIdx       int32     `json:"next_idx"`
 }
 
 func (q *Queries) updateUser(ctx context.Context, arg updateUserParams) (User, error) {
@@ -361,6 +373,7 @@ func (q *Queries) updateUser(ctx context.Context, arg updateUserParams) (User, e
 		arg.OrderBy,
 		arg.OrderDesc,
 		arg.ShiniesCaught,
+		arg.NextIdx,
 	)
 	var i User
 	err := row.Scan(
@@ -370,6 +383,7 @@ func (q *Queries) updateUser(ctx context.Context, arg updateUserParams) (User, e
 		&i.OrderBy,
 		&i.OrderDesc,
 		&i.ShiniesCaught,
+		&i.NextIdx,
 	)
 	return i, err
 }

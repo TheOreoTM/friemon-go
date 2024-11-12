@@ -39,7 +39,7 @@ func SelectedHandler(b *friemon.Bot) handler.CommandHandler {
 		statFieldValues = append(statFieldValues, []string{"Sp. Atk", fmt.Sprintf("%d – IV: %d/31", ch.SpAtk(), ch.IvSpAtk)})
 		statFieldValues = append(statFieldValues, []string{"Sp. Def", fmt.Sprintf("%d – IV: %d/31", ch.SpDef(), ch.IvSpDef)})
 		statFieldValues = append(statFieldValues, []string{"Speed", fmt.Sprintf("%d – IV: %d/31", ch.Spd(), ch.IvSpd)})
-		statFieldValues = append(statFieldValues, []string{"Total IV", fmt.Sprintf("%v", fmt.Sprintf("%.2f", ch.IvPercentage()*100)+"%")})
+		statFieldValues = append(statFieldValues, []string{"Total IV", ch.IvPercentage()})
 		statFieldContent := ""
 		for _, v := range statFieldValues {
 			statFieldContent += fmt.Sprintf("**%s:** %s\n", v[0], v[1])
