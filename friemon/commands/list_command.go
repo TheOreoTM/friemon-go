@@ -37,6 +37,7 @@ func ListHandler(b *friemon.Bot) handler.CommandHandler {
 		if err != nil {
 			return e.CreateMessage(ErrorMessage(err.Error()))
 		}
+		
 
 		return b.Paginator.Create(e.Respond, paginator.Pages{
 			ID: e.ID().String(),

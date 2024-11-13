@@ -25,7 +25,7 @@ type Character struct {
 	ClaimedTimestamp time.Time // Timestamp when the character was claimed
 	IDX              int       // Index of the character in the list
 
-	CharacterID int                   // The unique ID of the character
+	CharacterID int                   // The associated with entities.Character
 	Level       int                   // The level of the character
 	Xp          int                   // The current xp of the character
 	Personality constants.Personality // The personality of the character
@@ -34,8 +34,8 @@ type Character struct {
 	IvHP    int // The IV of the character's HP
 	IvAtk   int // The IV of the character's Attack
 	IvDef   int // The IV of the character's Defense
-	IvSpAtk int // The IV of the character's Sp. Attack - NOT_USED
-	IvSpDef int // The IV of the character's Sp. Defense - NOT_USED
+	IvSpAtk int // The IV of the character's Sp. Attack
+	IvSpDef int // The IV of the character's Sp. Defense
 	IvSpd   int // The IV of the character's Speed
 
 	IvTotal float64 // The total IV of the character
@@ -193,7 +193,7 @@ func (c *Character) IvPercentage() string {
 }
 
 func (c *Character) Sprite() string {
-	emoji, ok := CharacterSprites[c.Data()]
+	emoji, ok := CharacterSprites[c.CharacterID]
 	if ok {
 		return fmt.Sprintf("<:character:%v>", emoji)
 	}
