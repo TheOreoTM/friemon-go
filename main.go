@@ -47,6 +47,7 @@ func main() {
 
 	h := handler.New()
 	for _, cmd := range commands.Commands {
+		slog.Info("Registering command", slog.String("command", cmd.Cmd.CommandName()))
 		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
 	}
 	h.Autocomplete("/test", commands.TestAutocompleteHandler)
