@@ -18,7 +18,7 @@ import (
 	"github.com/theoreotm/friemon/friemon/db"
 )
 
-func New(cfg Config, version string, commit string) *Bot {
+func New(cfg Config, version string, commit string, ctx context.Context) *Bot {
 	db, conn, err := db.NewDB(cfg.Database)
 	if err != nil {
 		slog.Error("failed to initialize database: %v", slog.String("err", err.Error()))
@@ -32,6 +32,7 @@ func New(cfg Config, version string, commit string) *Bot {
 		Paginator: paginator.New(),
 		Version:   version,
 		Commit:    commit,
+		Context:   ctx,
 		conn:      conn,
 	}
 
@@ -47,6 +48,7 @@ type Bot struct {
 	DB        *db.Queries
 	Version   string
 	Commit    string
+	Context   context.Context
 	conn      *pgx.Conn
 }
 

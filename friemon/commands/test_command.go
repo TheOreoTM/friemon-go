@@ -23,7 +23,8 @@ var test = &Command{
 			},
 		},
 	},
-	Handler: handleTest,
+	Handler:      handleTest,
+	Autocomplete: handleTestAutocomplete,
 }
 
 func handleTest(b *friemon.Bot) handler.CommandHandler {
@@ -36,19 +37,21 @@ func handleTest(b *friemon.Bot) handler.CommandHandler {
 	}
 }
 
-func TestAutocompleteHandler(e *handler.AutocompleteEvent) error {
-	return e.AutocompleteResult([]discord.AutocompleteChoice{
-		discord.AutocompleteChoiceString{
-			Name:  "1",
-			Value: "1",
-		},
-		discord.AutocompleteChoiceString{
-			Name:  "2",
-			Value: "2",
-		},
-		discord.AutocompleteChoiceString{
-			Name:  "3",
-			Value: "3",
-		},
-	})
+func handleTestAutocomplete(b *friemon.Bot) handler.AutocompleteHandler {
+	return func(e *handler.AutocompleteEvent) error {
+		return e.AutocompleteResult([]discord.AutocompleteChoice{
+			discord.AutocompleteChoiceString{
+				Name:  "1",
+				Value: "1",
+			},
+			discord.AutocompleteChoiceString{
+				Name:  "2",
+				Value: "2",
+			},
+			discord.AutocompleteChoiceString{
+				Name:  "3",
+				Value: "3",
+			},
+		})
+	}
 }

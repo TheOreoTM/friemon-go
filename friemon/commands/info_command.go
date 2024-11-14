@@ -2,9 +2,13 @@ package commands
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/google/uuid"
+	"github.com/theoreotm/friemon/constants"
+	"github.com/theoreotm/friemon/entities"
 	"github.com/theoreotm/friemon/friemon"
 )
 
@@ -16,22 +20,46 @@ var cmdInfo = &Command{
 	Cmd: discord.SlashCommandCreate{
 		Name:        "info",
 		Description: "Get your current character",
+		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionString{
+				Name:         "id",
+				Description:  "The ID of the character",
+				Required:     false,
+				Autocomplete: true,
+			},
+		},
 	},
-	Handler: handleInfo,
+	Autocomplete: handleInfoAutocomplete,
+	Handler:      handleInfo,
 }
 
 func handleInfo(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
-		ch, err := b.DB.GetSelectedCharacter(e.Ctx, e.Member().User.ID)
-		if err != nil {
-			return e.CreateMessage(discord.MessageCreate{
-				Content: fmt.Sprintf("Error: %s", err),
-			})
+		id := e.SlashCommandInteractionData().String("id")
+		var ch *entities.Character
+
+		if id != "" && id != "-1" {
+			dbChar, err := b.DB.GetCharacter(e.Ctx, uuid.MustParse(id))
+			if err != nil {
+				ch = nil
+			}
+			ch = dbChar
+		}
+
+		if ch == nil {
+			selectedCh, err := b.DB.GetSelectedCharacter(e.Ctx, e.Member().User.ID)
+			if err != nil {
+				return e.CreateMessage(discord.MessageCreate{
+					Content: fmt.Sprintf("Error: %s", err),
+				})
+			}
+			ch = selectedCh
 		}
 
 		var detailFieldValues = [][]string{}
-		detailFieldValues = append(detailFieldValues, []string{"XP", fmt.Sprintf("%d", ch.Xp)})
+		detailFieldValues = append(detailFieldValues, []string{"XP", fmt.Sprintf("%d/%d", ch.XP, ch.MaxXP())})
 		detailFieldValues = append(detailFieldValues, []string{"Personality", ch.Personality.String()})
+
 		detailFieldContent := ""
 		for _, v := range detailFieldValues {
 			detailFieldContent += fmt.Sprintf("**%s:** %s\n", v[0], v[1])
@@ -55,8 +83,9 @@ func handleInfo(b *friemon.Bot) handler.CommandHandler {
 		embed := discord.NewEmbedBuilder().
 			SetTitle(fmt.Sprintf("%v", ch)).
 			SetThumbnail(embedSmallImage).
-			SetFooter(fmt.Sprintf("Displaying character %v. \nID: %v", ch.IDX, ch.ID), "").
 			SetImage("attachment://character.png").
+			SetFooterTextf("Displaying character %v \nID: %v", ch.IDX, ch.ID).
+			SetColor(constants.ColorDefault).
 			AddFields(
 				discord.EmbedField{
 					Name:  "Details",
@@ -78,5 +107,41 @@ func handleInfo(b *friemon.Bot) handler.CommandHandler {
 			Embeds: []discord.Embed{embed},
 			Files:  []*discord.File{image},
 		})
+	}
+}
+
+func handleInfoAutocomplete(b *friemon.Bot) handler.AutocompleteHandler {
+	return func(e *handler.AutocompleteEvent) error {
+		query := e.Data.String("id")
+		var results []discord.AutocompleteChoiceString
+		chars, err := b.DB.GetCharactersForUser(e.Ctx, e.Member().User.ID)
+		if err != nil {
+			return e.AutocompleteResult([]discord.AutocompleteChoice{
+				discord.AutocompleteChoiceString{
+					Name:  "You dont have any characters",
+					Value: "-1",
+				},
+			})
+		}
+
+		for _, ch := range chars {
+			nameId := strings.ToLower(fmt.Sprintf("%v %v", ch.CharacterName(), ch.IDX))
+			if strings.Contains(nameId, query) {
+				results = append(results, discord.AutocompleteChoiceString{
+					Name:  fmt.Sprintf("%v - Level %v %v", ch.IDX, ch.Level, ch.CharacterName()),
+					Value: ch.ID.String(),
+				})
+			}
+		}
+
+		var choices []discord.AutocompleteChoice
+		for i, r := range results {
+			if i >= 25 {
+				break
+			}
+			choices = append(choices, r)
+		}
+
+		return e.AutocompleteResult(choices)
 	}
 }

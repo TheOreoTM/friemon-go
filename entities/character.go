@@ -30,7 +30,7 @@ type Character struct {
 
 	CharacterID int                   // The associated with entities.Character
 	Level       int                   // The level of the character
-	Xp          int                   // The current xp of the character
+	XP          int                   // The current xp of the character
 	Personality constants.Personality // The personality of the character
 	Shiny       bool                  // Whether the character is shiny or not
 
@@ -77,7 +77,7 @@ func (c *Character) Image() (*discord.File, error) {
 		return file, nil
 	}
 
-	loa, err := loadImage(fmt.Sprintf("../assets/characters/%v.png", c.CharacterID))
+	loa, err := loadImage(fmt.Sprintf("./assets/characters/%v.png", c.CharacterID))
 	if err != nil {
 		return nil, err
 	}

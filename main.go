@@ -40,17 +40,21 @@ func main() {
 	slog.Info("Starting friemon...", slog.String("version", version), slog.String("commit", commit))
 	slog.Info("Syncing commands", slog.Bool("sync", *shouldSyncCommands))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	b := friemon.New(*cfg, version, commit)
+	b := friemon.New(*cfg, version, commit, ctx)
 
 	h := handler.New()
 	for _, cmd := range commands.Commands {
 		slog.Info("Registering command", slog.String("command", cmd.Cmd.CommandName()))
 		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
+
+		if cmd.Autocomplete != nil {
+			h.Autocomplete(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Autocomplete(b))
+		}
 	}
-	h.Autocomplete("/test", commands.TestAutocompleteHandler)
+
 	h.Component("/test-button", components.TestComponent)
 
 	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.MessageHandler(b)); err != nil {
@@ -59,10 +63,11 @@ func main() {
 	}
 
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		err := b.Close(ctx)
-		if err != nil {
+		cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+
+		if err := b.Close(shutdownCtx); err != nil {
 			slog.Error("Failed to close friemon", slog.Any("err", err))
 		}
 	}()

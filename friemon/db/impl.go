@@ -91,7 +91,7 @@ func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch entities.Character) (*entities.Character, error) {
+func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *entities.Character) (*entities.Character, error) {
 
 	dbch, err := q.updateCharacter(ctx, updateCharacterParams{
 		ID:               (ch.ID),
@@ -100,7 +100,7 @@ func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch entities
 		Idx:              int32(ch.IDX),
 		CharacterID:      int32(ch.CharacterID),
 		Level:            int32(ch.Level),
-		Xp:               int32(ch.Xp),
+		Xp:               int32(ch.XP),
 		Personality:      ch.Personality.String(),
 		Shiny:            ch.Shiny,
 		IvHp:             int32(ch.IvHP),
@@ -190,7 +190,7 @@ func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 		ClaimedTimestamp: ch.ClaimedTimestamp,
 		CharacterID:      int32(ch.CharacterID),
 		Level:            int32(ch.Level),
-		Xp:               int32(ch.Xp),
+		Xp:               int32(ch.XP),
 		Personality:      ch.Personality.String(),
 		Shiny:            ch.Shiny,
 		IvHp:             int32(ch.IvHP),
@@ -217,7 +217,7 @@ func dbCharToModelChar(dbch Character) *entities.Character {
 		IDX:              int(dbch.Idx),
 		CharacterID:      int(dbch.CharacterID),
 		Level:            int(dbch.Level),
-		Xp:               int(dbch.Xp),
+		XP:               int(dbch.Xp),
 		Personality:      stringToPersonality(dbch.Personality),
 		Shiny:            dbch.Shiny,
 		IvHP:             int(dbch.IvHp),
