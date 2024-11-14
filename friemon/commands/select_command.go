@@ -1,29 +1,27 @@
 package commands
 
 import (
-	"fmt"
-
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/friemon"
 )
 
 func init() {
-	Commands[version.Cmd.CommandName()] = version
+	Commands[cmdSelect.Cmd.CommandName()] = cmdSelect
 }
 
-var version = &Command{
+var cmdSelect = &Command{
 	Cmd: discord.SlashCommandCreate{
-		Name:        "version",
-		Description: "version command",
+		Name:        "select",
+		Description: "Select a character",
 	},
-	Handler: handleVersion,
+	Handler: handleSelect,
 }
 
-func handleVersion(b *friemon.Bot) handler.CommandHandler {
+func handleSelect(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		return e.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("Version: %s\nCommit: %s", b.Version, b.Commit),
+			Content: "Not implemented",
 		})
 	}
 }

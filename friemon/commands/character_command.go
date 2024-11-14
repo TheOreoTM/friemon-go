@@ -8,12 +8,19 @@ import (
 	"github.com/theoreotm/friemon/friemon"
 )
 
-var character = discord.SlashCommandCreate{
-	Name:        "character",
-	Description: "Generate a random character",
+func init() {
+	Commands[cmdCharacter.Cmd.CommandName()] = cmdCharacter
 }
 
-func CharacterHandler(b *friemon.Bot) handler.CommandHandler {
+var cmdCharacter = &Command{
+	Cmd: discord.SlashCommandCreate{
+		Name:        "character",
+		Description: "Generate a random character",
+	},
+	Handler: handleCharacter,
+}
+
+func handleCharacter(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		ch, err := b.DB.CreateCharacter(e.Ctx, e.Member().User.ID)
 		if err != nil {

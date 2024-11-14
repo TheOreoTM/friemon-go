@@ -2,15 +2,16 @@ package commands
 
 import (
 	"github.com/disgoorg/disgo/discord"
+	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/constants"
+	"github.com/theoreotm/friemon/friemon"
 )
 
-var Commands = []discord.ApplicationCommandCreate{
-	test,
-	version,
-	character,
-	list,
-	selected,
+var Commands = map[string]*Command{}
+
+type Command struct {
+	Cmd     discord.ApplicationCommandCreate
+	Handler func(b *friemon.Bot) handler.CommandHandler
 }
 
 func SuccessMessage(title, desc string) discord.MessageCreate {

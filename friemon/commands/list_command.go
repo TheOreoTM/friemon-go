@@ -13,16 +13,23 @@ import (
 	"github.com/theoreotm/friemon/friemon"
 )
 
+func init() {
+	Commands[cmdList.Cmd.CommandName()] = cmdList
+}
+
 const (
 	characterPerPage = 20
 )
 
-var list = discord.SlashCommandCreate{
-	Name:        "list",
-	Description: "Get a list of characters you own",
+var cmdList = &Command{
+	Cmd: discord.SlashCommandCreate{
+		Name:        "list",
+		Description: "Get a list of characters you own",
+	},
+	Handler: handlelist,
 }
 
-func ListHandler(b *friemon.Bot) handler.CommandHandler {
+func handlelist(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		characters, err := b.DB.GetCharactersForUser(e.Ctx, e.Member().User.ID)
 		if err != nil {
@@ -37,7 +44,6 @@ func ListHandler(b *friemon.Bot) handler.CommandHandler {
 		if err != nil {
 			return e.CreateMessage(ErrorMessage(err.Error()))
 		}
-		
 
 		return b.Paginator.Create(e.Respond, paginator.Pages{
 			ID: e.ID().String(),

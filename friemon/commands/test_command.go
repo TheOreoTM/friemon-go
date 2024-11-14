@@ -3,27 +3,37 @@ package commands
 import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/theoreotm/friemon/friemon"
 )
 
-var test = discord.SlashCommandCreate{
-	Name:        "test",
-	Description: "test command",
-	Options: []discord.ApplicationCommandOption{
-		discord.ApplicationCommandOptionString{
-			Name:         "choice",
-			Description:  "some autocomplete choice",
-			Required:     true,
-			Autocomplete: true,
-		},
-	},
+func init() {
+	Commands[test.Cmd.CommandName()] = test
 }
 
-func TestHandler(e *handler.CommandEvent) error {
-	return e.CreateMessage(discord.NewMessageCreateBuilder().
-		SetContentf("test command. Choice: %s", e.SlashCommandInteractionData().String("choice")).
-		AddActionRow(discord.NewPrimaryButton("test", "/test-button")).
-		Build(),
-	)
+var test = &Command{
+	Cmd: discord.SlashCommandCreate{
+		Name:        "test",
+		Description: "test command",
+		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionString{
+				Name:         "choice",
+				Description:  "some autocomplete choice",
+				Required:     true,
+				Autocomplete: true,
+			},
+		},
+	},
+	Handler: handleTest,
+}
+
+func handleTest(b *friemon.Bot) handler.CommandHandler {
+	return func(e *handler.CommandEvent) error {
+		return e.CreateMessage(discord.NewMessageCreateBuilder().
+			SetContentf("test command. Choice: %s", e.SlashCommandInteractionData().String("choice")).
+			AddActionRow(discord.NewPrimaryButton("test", "/test-button")).
+			Build(),
+		)
+	}
 }
 
 func TestAutocompleteHandler(e *handler.AutocompleteEvent) error {

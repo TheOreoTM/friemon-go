@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/disgo/bot"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/friemon"
 	"github.com/theoreotm/friemon/friemon/commands"
@@ -44,12 +46,10 @@ func main() {
 	b := friemon.New(*cfg, version, commit)
 
 	h := handler.New()
-	h.Command("/test", commands.TestHandler)
+	for _, cmd := range commands.Commands {
+		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
+	}
 	h.Autocomplete("/test", commands.TestAutocompleteHandler)
-	h.Command("/character", commands.CharacterHandler(b))
-	h.Command("/list", commands.ListHandler(b))
-	h.Command("/version", commands.VersionHandler(b))
-	h.Command("/selected", commands.SelectedHandler(b))
 	h.Component("/test-button", components.TestComponent)
 
 	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.MessageHandler(b)); err != nil {
@@ -67,8 +67,13 @@ func main() {
 	}()
 
 	if *shouldSyncCommands {
+		var cmds []discord.ApplicationCommandCreate
+		for _, cmd := range commands.Commands {
+			cmds = append(cmds, cmd.Cmd)
+		}
+
 		slog.Info("Syncing commands", slog.Any("guild_ids", cfg.Bot.DevGuilds))
-		if err = handler.SyncCommands(b.Client, commands.Commands, cfg.Bot.DevGuilds); err != nil {
+		if err = handler.SyncCommands(b.Client, cmds, cfg.Bot.DevGuilds); err != nil {
 			slog.Error("Failed to sync commands", slog.Any("err", err))
 		}
 	}

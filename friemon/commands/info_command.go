@@ -10,12 +10,19 @@ import (
 	"github.com/theoreotm/friemon/friemon"
 )
 
-var selected = discord.SlashCommandCreate{
-	Name:        "selected",
-	Description: "Generate a random character",
+func init() {
+	Commands[cmdInfo.Cmd.CommandName()] = cmdInfo
 }
 
-func SelectedHandler(b *friemon.Bot) handler.CommandHandler {
+var cmdInfo = &Command{
+	Cmd: discord.SlashCommandCreate{
+		Name:        "info",
+		Description: "Get your current character",
+	},
+	Handler: handleInfo,
+}
+
+func handleInfo(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		ch, err := b.DB.GetSelectedCharacter(e.Ctx, e.Member().User.ID)
 		if err != nil {
@@ -62,9 +69,8 @@ func SelectedHandler(b *friemon.Bot) handler.CommandHandler {
 					Value: statFieldContent,
 				}).Build()
 
-		// read the character image from the assets folder
+		loa, err := loadImage(fmt.Sprintf("./assets/characters/%v.png", ch.CharacterID)) // TODO: Move this to a function for Character
 
-		loa, err := loadImage(fmt.Sprintf("./assets/characters/%v.png", ch.CharacterID))
 		fmt.Println()
 		if err != nil {
 			return e.CreateMessage(discord.MessageCreate{
