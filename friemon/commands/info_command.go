@@ -2,8 +2,6 @@ package commands
 
 import (
 	"fmt"
-	"io"
-	"os"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
@@ -69,27 +67,16 @@ func handleInfo(b *friemon.Bot) handler.CommandHandler {
 					Value: statFieldContent,
 				}).Build()
 
-		loa, err := loadImage(fmt.Sprintf("./assets/characters/%v.png", ch.CharacterID)) // TODO: Move this to a function for Character
-
-		fmt.Println()
+		image, err := ch.Image()
 		if err != nil {
 			return e.CreateMessage(discord.MessageCreate{
 				Content: fmt.Sprintf("Error: %s", err),
 			})
 		}
-		embedImage := discord.NewFile("character.png", "", loa)
 
 		return e.CreateMessage(discord.MessageCreate{
 			Embeds: []discord.Embed{embed},
-			Files:  []*discord.File{embedImage},
+			Files:  []*discord.File{image},
 		})
 	}
-}
-
-func loadImage(filePath string) (io.Reader, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	return file, nil
 }

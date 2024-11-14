@@ -2,10 +2,13 @@ package entities
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
+	"os"
 	"time"
 
+	"github.com/disgoorg/disgo/discord"
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/constants"
 )
@@ -60,11 +63,29 @@ func NewCharacter(ownerID string) *Character {
 	c.Level = 1
 	c.HeldItem = -1
 
-	c.Random()
+	c.Randomize()
 	return c
 }
 
-func (c *Character) Random() {
+// Returns the embed image for the character
+func (c *Character) Image() (*discord.File, error) {
+	loadImage := func(filePath string) (io.Reader, error) {
+		file, err := os.Open(filePath)
+		if err != nil {
+			return nil, err
+		}
+		return file, nil
+	}
+
+	loa, err := loadImage(fmt.Sprintf("../assets/characters/%v.png", c.CharacterID))
+	if err != nil {
+		return nil, err
+	}
+
+	return discord.NewFile("character.png", "", loa), nil
+}
+
+func (c *Character) Randomize() {
 	randomId := randomInt(1, len(Characters))
 
 	c.CharacterID = Characters[randomId].ID
