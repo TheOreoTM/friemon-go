@@ -194,7 +194,7 @@ func (c Character) Format(spec string) string {
 		output += fmt.Sprintf("%s ", c.Sprite())
 	}
 
-	output += fmt.Sprintf("**%s**", c.CharacterName())
+	output += c.CharacterName()
 
 	if contains(spec, 'n') && c.Nickname != "" {
 		output += fmt.Sprintf(" \"%s\"", c.Nickname)

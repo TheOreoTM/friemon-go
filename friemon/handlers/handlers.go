@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"math/rand"
 
@@ -39,7 +38,6 @@ func MessageHandler(b *friemon.Bot) bot.EventListener {
 		}
 
 		selectedCharacter.XP += randomInt(10, 40)
-		fmt.Println(selectedCharacter.XP)
 		if selectedCharacter.XP > selectedCharacter.MaxXP() {
 			selectedCharacter.XP = 0
 

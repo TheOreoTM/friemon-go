@@ -22,20 +22,20 @@ var cmdInfo = &Command{
 		Description: "Get your current character",
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionString{
-				Name:         "id",
-				Description:  "The ID of the character",
+				Name:         "character",
+				Description:  "The character you want to get info about",
 				Required:     false,
 				Autocomplete: true,
 			},
 		},
 	},
-	Autocomplete: handleInfoAutocomplete,
+	Autocomplete: handleGetCharacterAutocomplete,
 	Handler:      handleInfo,
 }
 
 func handleInfo(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
-		id := e.SlashCommandInteractionData().String("id")
+		id := e.SlashCommandInteractionData().String("character")
 		var ch *entities.Character
 
 		if id != "" && id != "-1" {
@@ -110,9 +110,9 @@ func handleInfo(b *friemon.Bot) handler.CommandHandler {
 	}
 }
 
-func handleInfoAutocomplete(b *friemon.Bot) handler.AutocompleteHandler {
+func handleGetCharacterAutocomplete(b *friemon.Bot) handler.AutocompleteHandler {
 	return func(e *handler.AutocompleteEvent) error {
-		query := e.Data.String("id")
+		query := e.Data.String("character")
 		var results []discord.AutocompleteChoiceString
 		chars, err := b.DB.GetCharactersForUser(e.Ctx, e.Member().User.ID)
 		if err != nil {
