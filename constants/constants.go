@@ -1,6 +1,7 @@
 package constants
 
 type Personality int
+type Color int
 
 // Define the multipliers for each personality.
 var PersonalityStatMultipliers = map[Personality]map[string]float64{
@@ -127,4 +128,13 @@ const (
 	PersonalityInsightful
 	PersonalityPlayful
 	PersonalityRash // Stark
+)
+
+const (
+	ColorSuccess int = 0x46b485
+	ColorFail    int = 0xf05050
+	ColorWarn    int = 0xfee65c
+	ColorInfo    int = 0x297bd1
+	ColorLoading int = 0x23272a
+	ColorDefault int = 0x2b2d31
 )

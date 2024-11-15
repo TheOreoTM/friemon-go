@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/disgo/bot"
+	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/friemon"
 	"github.com/theoreotm/friemon/friemon/commands"
@@ -38,17 +40,21 @@ func main() {
 	slog.Info("Starting friemon...", slog.String("version", version), slog.String("commit", commit))
 	slog.Info("Syncing commands", slog.Bool("sync", *shouldSyncCommands))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	b := friemon.New(*cfg, version, commit)
+	b := friemon.New(*cfg, version, commit, ctx)
 
 	h := handler.New()
-	h.Command("/test", commands.TestHandler)
-	h.Autocomplete("/test", commands.TestAutocompleteHandler)
-	h.Command("/character", commands.CharacterHandler(b))
-	h.Command("/list", commands.ListHandler(b))
-	h.Command("/version", commands.VersionHandler(b))
+	for _, cmd := range commands.Commands {
+		slog.Info("Registering command", slog.String("command", cmd.Cmd.CommandName()))
+		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
+
+		if cmd.Autocomplete != nil {
+			h.Autocomplete(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Autocomplete(b))
+		}
+	}
+
 	h.Component("/test-button", components.TestComponent)
 
 	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.MessageHandler(b)); err != nil {
@@ -57,21 +63,30 @@ func main() {
 	}
 
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		b.Client.Close(ctx)
+		cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+
+		if err := b.Close(shutdownCtx); err != nil {
+			slog.Error("Failed to close friemon", slog.Any("err", err))
+		}
 	}()
 
 	if *shouldSyncCommands {
+		var cmds []discord.ApplicationCommandCreate
+		for _, cmd := range commands.Commands {
+			cmds = append(cmds, cmd.Cmd)
+		}
+
 		slog.Info("Syncing commands", slog.Any("guild_ids", cfg.Bot.DevGuilds))
-		if err = handler.SyncCommands(b.Client, commands.Commands, cfg.Bot.DevGuilds); err != nil {
+		if err = handler.SyncCommands(b.Client, cmds, cfg.Bot.DevGuilds); err != nil {
 			slog.Error("Failed to sync commands", slog.Any("err", err))
 		}
 	}
 
 	if *shouldNuke {
 		slog.Info("Nuking database")
-		if err = b.Database.DeleteEverything(ctx); err != nil {
+		if err = b.DB.DeleteEverything(ctx); err != nil {
 			slog.Error("Failed to nuke database", slog.Any("err", err))
 		}
 	}

@@ -13,6 +13,46 @@ import (
 
 var _ Store = (*Queries)(nil)
 
+func (q *Queries) DeleteEverything(ctx context.Context) error {
+	err := q.deleteUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = q.deleteCharacters(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, user entities.User) (*entities.User, error) {
+	dbUser, err := q.updateUser(ctx, updateUserParams{
+		ID:            user.ID.String(),
+		Balance:       int32(user.Balance),
+		SelectedID:    user.SelectedID,
+		OrderBy:       int32(user.Order.OrderBy),
+		OrderDesc:     user.Order.Desc,
+		ShiniesCaught: int32(user.ShiniesCaught),
+		NextIdx:       int32(user.NextIdx),
+	})
+
+	if err != nil {
+		return &entities.User{}, err
+	}
+	return dbUserToModelUser(dbUser), nil
+}
+
+func (q *Queries) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*entities.Character, error) {
+	dbch, err := q.getSelectedCharacter(ctx, id.String())
+	if err != nil {
+		return &entities.Character{}, err
+	}
+
+	return dbCharToModelChar(dbch), nil
+}
+
 func (q *Queries) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
 	dbUser, err := q.createUser(ctx, id.String())
 	if err != nil {
@@ -51,16 +91,16 @@ func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch entities.Character) (*entities.Character, error) {
+func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *entities.Character) (*entities.Character, error) {
 
 	dbch, err := q.updateCharacter(ctx, updateCharacterParams{
-		ID:               uuid.MustParse(ch.ID),
+		ID:               (ch.ID),
 		OwnerID:          ch.OwnerID,
 		ClaimedTimestamp: ch.ClaimedTimestamp,
 		Idx:              int32(ch.IDX),
 		CharacterID:      int32(ch.CharacterID),
 		Level:            int32(ch.Level),
-		Xp:               int32(ch.Xp),
+		Xp:               int32(ch.XP),
 		Personality:      ch.Personality.String(),
 		Shiny:            ch.Shiny,
 		IvHp:             int32(ch.IvHP),
@@ -94,15 +134,29 @@ func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Cha
 
 func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*entities.Character, error) {
 	randomChar := entities.NewCharacter(ownerID.String())
-	_, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
+	user, err := q.GetUser(ctx, ownerID)
 	if err != nil {
 		return &entities.Character{}, err
 	}
 
-	return randomChar, nil
+	randomChar.IDX = user.NextIdx
+
+	dbch, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
+	if err != nil {
+		return &entities.Character{}, err
+	}
+
+	user.SelectedID = dbch.ID
+	user.NextIdx++
+	_, err = q.UpdateUser(ctx, *user)
+	if err != nil {
+		return &entities.Character{}, err
+	}
+
+	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) (*[]entities.Character, error) {
+func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
 	dbchs, err := q.getCharactersForUser(ctx, userID.String())
 	if err != nil {
 		return nil, err
@@ -113,25 +167,8 @@ func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID)
 		chars = append(chars, *dbCharToModelChar(dbch))
 	}
 
-	return &chars, nil
+	return chars, nil
 }
-
-// func isValidOrderBy(orderBy string) bool {
-// 	return orderBy == "idx" || orderBy == "level" || orderBy == "xp" || orderBy == "iv_total"
-// }
-
-// func isValidFilter(filter []string) bool {
-// 	for _, f := range filter {
-// 		if f != "shiny" && f != "favourite" && f != "held_item" && f != "moves" {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
-
-// func isValidSort(sort string) bool {
-// 	return sort == "asc" || sort == "desc"
-// }
 
 func dbUserToModelUser(dbUser User) *entities.User {
 	return &entities.User{
@@ -143,6 +180,7 @@ func dbUserToModelUser(dbUser User) *entities.User {
 			Desc:    dbUser.OrderDesc,
 		},
 		ShiniesCaught: int(dbUser.ShiniesCaught),
+		NextIdx:       int(dbUser.NextIdx),
 	}
 }
 
@@ -152,7 +190,7 @@ func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 		ClaimedTimestamp: ch.ClaimedTimestamp,
 		CharacterID:      int32(ch.CharacterID),
 		Level:            int32(ch.Level),
-		Xp:               int32(ch.Xp),
+		Xp:               int32(ch.XP),
 		Personality:      ch.Personality.String(),
 		Shiny:            ch.Shiny,
 		IvHp:             int32(ch.IvHP),
@@ -173,13 +211,13 @@ func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 
 func dbCharToModelChar(dbch Character) *entities.Character {
 	return &entities.Character{
-		ID:               dbch.ID.String(),
+		ID:               dbch.ID,
 		OwnerID:          dbch.OwnerID,
 		ClaimedTimestamp: dbch.ClaimedTimestamp,
 		IDX:              int(dbch.Idx),
 		CharacterID:      int(dbch.CharacterID),
 		Level:            int(dbch.Level),
-		Xp:               int(dbch.Xp),
+		XP:               int(dbch.Xp),
 		Personality:      stringToPersonality(dbch.Personality),
 		Shiny:            dbch.Shiny,
 		IvHP:             int(dbch.IvHp),

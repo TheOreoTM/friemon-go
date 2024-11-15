@@ -37,6 +37,8 @@ var Denken = NewBaseCharacter(10, "Denken", types(Psychic, None), 110, 85, 80, 1
 var Flamme = NewBaseCharacter(11, "Flamme", types(Fire, Fairy), 100, 100, 90, 150, 140, 90)
 var Serie = NewBaseCharacter(12, "Serie", types(Normal, None), 70, 100, 60, 170, 170, 100)
 
+
+
 func types(type0, type1 Type) []Type {
 	if type1 == 0 {
 		return []Type{type0, 0}

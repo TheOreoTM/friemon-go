@@ -41,4 +41,5 @@ type User struct {
 	OrderBy       int32     `json:"order_by"`
 	OrderDesc     bool      `json:"order_desc"`
 	ShiniesCaught int32     `json:"shinies_caught"`
+	NextIdx       int32     `json:"next_idx"`
 }

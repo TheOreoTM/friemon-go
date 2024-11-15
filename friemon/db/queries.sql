@@ -18,8 +18,21 @@ DELETE FROM characters WHERE id = $1;
 -- name: getUser :one
 SELECT * FROM users WHERE id = $1;
 
--- name: createUser :one
-INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught;
+-- name: updateUser :one
+UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6, next_idx = $7 WHERE id = $1 RETURNING *;
 
--- name: DeleteEverything :exec
-TRUNCATE TABLE characters;
+-- name: createUser :one
+INSERT INTO users (id) VALUES ($1) RETURNING *;
+
+-- name: getSelectedCharacter :one
+SELECT id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny,
+       iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite,
+       held_item, moves, color
+FROM characters
+WHERE characters.id = (SELECT selected_id FROM users WHERE users.id = $1);
+
+-- name: deleteUsers :exec
+DELETE FROM users;
+
+-- name: deleteCharacters :exec
+DELETE FROM characters;

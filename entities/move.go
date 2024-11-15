@@ -6,12 +6,13 @@ type TargetType int
 type MoveCategory int
 
 const (
-	TargetSingleOpponent TargetType = iota // Targets a single opponent
-	TargetAllOpponents                     // Targets all opponents
-	TargetUser                             // Targets the user
-	TargetSingleAlly                       // Targets a single ally
-	TargerAllAllies                        // Targets all allies
-	TargetAll                              // Targets everyone (useful for certain area moves)
+	TargetSingleFoes      TargetType = iota // Targets a single opponent
+	TargetAllFoes                           // Targets all opponents
+	TargetAllAdjacentFoes                   // Targets adjacent opponents
+	TargetUser                              // Targets the user
+	TargetSingleAlly                        // Targets a single ally
+	TargerAllAllies                         // Targets all allies
+	TargetAny                               // Targets everyone (useful for certain area moves)
 )
 
 const (
@@ -73,4 +74,7 @@ type moveCreateParams struct {
 	Effect          *EffectType
 	SecondaryEffect *EffectType
 	Target          TargetType
+	IgnoreDefensive bool
+	IgnoreEvasion   bool
+	CritRatio       int
 }
