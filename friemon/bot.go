@@ -16,6 +16,7 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/jackc/pgx/v5"
 	"github.com/theoreotm/friemon/friemon/db"
+	"github.com/theoreotm/friemon/friemon/memstore"
 )
 
 func New(cfg Config, version string, commit string, ctx context.Context) *Bot {
@@ -37,6 +38,7 @@ func New(cfg Config, version string, commit string, ctx context.Context) *Bot {
 	}
 
 	b.DB = db
+	b.Cache = memstore.NewMemoryCache()
 
 	return b
 }
@@ -46,6 +48,7 @@ type Bot struct {
 	Client    bot.Client
 	Paginator *paginator.Manager
 	DB        *db.Queries
+	Cache     memstore.Cache
 	Version   string
 	Commit    string
 	Context   context.Context
