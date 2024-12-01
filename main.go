@@ -31,12 +31,13 @@ func main() {
 	flag.Parse()
 
 	cfg, err := friemon.LoadConfig(*path)
+	setupLogger(cfg.Log)
+
 	if err != nil {
 		slog.Error("Failed to read config", slog.Any("err", err))
 		os.Exit(-1)
 	}
 
-	setupLogger(cfg.Log)
 	slog.Info("Starting friemon...", slog.String("version", version), slog.String("commit", commit))
 	slog.Info("Syncing commands", slog.Bool("sync", *shouldSyncCommands))
 
