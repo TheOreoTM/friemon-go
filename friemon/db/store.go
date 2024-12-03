@@ -12,7 +12,7 @@ import (
 type Store interface {
 	GetCharactersForUser(context.Context, snowflake.ID) ([]entities.Character, error)
 	GetCharacter(context.Context, uuid.UUID) (*entities.Character, error)
-	CreateCharacter(context.Context, snowflake.ID) (*entities.Character, error)
+	CreateCharacter(context.Context, snowflake.ID, *entities.Character) error
 	UpdateCharacter(context.Context, uuid.UUID, *entities.Character) (*entities.Character, error)
 	DeleteCharacter(context.Context, uuid.UUID) (*entities.Character, error)
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/theoreotm/friemon/entities"
 	"github.com/theoreotm/friemon/friemon"
 )
 
@@ -22,7 +23,8 @@ var cmdCharacter = &Command{
 
 func handleCharacter(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
-		ch, err := b.DB.CreateCharacter(e.Ctx, e.Member().User.ID)
+		randomChar := entities.NewCharacter(e.Member().User.ID.String())
+		err := b.DB.CreateCharacter(e.Ctx, e.Member().User.ID, randomChar)
 		if err != nil {
 			return e.CreateMessage(discord.MessageCreate{
 				Content: fmt.Sprintf("Error: %s", err),
@@ -30,7 +32,7 @@ func handleCharacter(b *friemon.Bot) handler.CommandHandler {
 		}
 
 		return e.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("IV percent %v for %v | %v", ch.IvPercentage(), ch.IvTotal, ch.Data().Name),
+			Content: fmt.Sprintf("IV percent %v for %v | %v", randomChar.IvPercentage(), randomChar.IvTotal, randomChar.Data().Name),
 		})
 	}
 }

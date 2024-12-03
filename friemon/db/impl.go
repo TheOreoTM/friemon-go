@@ -132,28 +132,26 @@ func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Cha
 	return dbCharToModelChar(dbch), nil
 }
 
-func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID) (*entities.Character, error) {
-	randomChar := entities.NewCharacter(ownerID.String())
+func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *entities.Character) error {
 	user, err := q.GetUser(ctx, ownerID)
 	if err != nil {
-		return &entities.Character{}, err
+		return err
 	}
 
-	randomChar.IDX = user.NextIdx
+	char.IDX = user.NextIdx
 
-	dbch, err := q.createCharacter(ctx, modelCharToDBChar(randomChar))
+	_, err = q.createCharacter(ctx, modelCharToDBChar(char))
 	if err != nil {
-		return &entities.Character{}, err
+		return err
 	}
 
-	user.SelectedID = dbch.ID
 	user.NextIdx++
 	_, err = q.UpdateUser(ctx, *user)
 	if err != nil {
-		return &entities.Character{}, err
+		return err
 	}
 
-	return dbCharToModelChar(dbch), nil
+	return nil
 }
 
 func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
