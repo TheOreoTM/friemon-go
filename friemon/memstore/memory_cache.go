@@ -20,14 +20,36 @@ type cacheItem struct {
 }
 
 func NewMemoryCache() Cache {
-	return &memoryCache{
+	cache := &memoryCache{
 		data: make(map[string]cacheItem),
 	}
+	go cache.cleanup()
+	return cache
+}
+
+func (c *memoryCache) IncrementInteractionCount(channelId snowflake.ID) error {
+	key := "channel:" + channelId.String() + ":interactions"
+	return c.Set(key, c.GetInteractionCount(channelId)+1, 3*time.Minute)
+}
+
+func (c *memoryCache) GetInteractionCount(channelId snowflake.ID) int {
+	key := "channel:" + channelId.String() + ":interactions"
+	value, err := c.Get(key)
+	if err != nil {
+		return 0
+	}
+
+	return value.(int)
+}
+
+func (c *memoryCache) ResetInteractionCount(channelId snowflake.ID) error {
+	key := "channel:" + channelId.String() + ":interactions"
+	return c.Set(key, 0, 3*time.Minute)
 }
 
 func (c *memoryCache) SetChannelCharacter(channelID snowflake.ID, character *entities.Character) error {
 	key := "channel:" + channelID.String() + ":character"
-	return c.Set(key, character, 60*60*24)
+	return c.Set(key, character, 3*time.Minute)
 }
 
 func (c *memoryCache) GetChannelCharacter(channelID snowflake.ID) (*entities.Character, error) {
@@ -50,7 +72,7 @@ func (c *memoryCache) Set(key string, value interface{}, ttl time.Duration) erro
 	defer c.mu.Unlock()
 	c.data[key] = cacheItem{
 		value:     value,
-		expiresAt: time.Now().Add(ttl * time.Second),
+		expiresAt: time.Now().Add(ttl),
 	}
 	return nil
 }
@@ -71,4 +93,20 @@ func (c *memoryCache) Delete(key string) error {
 	defer c.mu.Unlock()
 	delete(c.data, key)
 	return nil
+}
+
+func (c *memoryCache) cleanup() {
+	ticker := time.NewTicker(1 * time.Minute) // Cleanup interval
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		c.mu.Lock()
+		for key, item := range c.data {
+			if now.After(item.expiresAt) {
+				delete(c.data, key)
+			}
+		}
+		c.mu.Unlock()
+	}
 }

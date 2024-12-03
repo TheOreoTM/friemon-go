@@ -67,6 +67,14 @@ func NewCharacter(ownerID string) *Character {
 	return c
 }
 
+// RandomCharacterSpawn returns an unclaimed character
+func RandomCharacterSpawn() *Character {
+	c := &Character{}
+	c.Randomize()
+
+	return c
+}
+
 // Returns the embed image for the character
 func (c *Character) Image() (*discord.File, error) {
 	loadImage := func(filePath string) (io.Reader, error) {

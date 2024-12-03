@@ -12,6 +12,10 @@ type Cache interface {
 	Get(key string) (interface{}, error)
 	Delete(key string) error
 
+	IncrementInteractionCount(channelId snowflake.ID) error
+	GetInteractionCount(channelId snowflake.ID) int
+	ResetInteractionCount(channelId snowflake.ID) error
+
 	SetChannelCharacter(channelID snowflake.ID, character *entities.Character) error
 	GetChannelCharacter(channelID snowflake.ID) (*entities.Character, error)
 	DeleteChannelCharacter(channelID snowflake.ID) error
