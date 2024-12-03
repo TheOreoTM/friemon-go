@@ -3,7 +3,6 @@ package handlers
 import (
 	"log/slog"
 
-	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/theoreotm/friemon/constants"
@@ -12,48 +11,51 @@ import (
 )
 
 const (
-	spawnThreshold = 4
+	spawnThreshold = 4 // Change accordingly
 )
 
-func SpawnHandler(b *friemon.Bot) bot.EventListener {
-	return bot.NewListenerFunc(func(e *events.MessageCreate) {
-		slog.Info("Interaction count", slog.Int("count", b.Cache.GetInteractionCount(e.ChannelID)))
-		b.Cache.IncrementInteractionCount(e.ChannelID)
+func spawnCharacter(b *friemon.Bot, e *events.MessageCreate) {
+	slog.Info("Interaction count", slog.Int("count", b.Cache.GetInteractionCount(e.ChannelID)))
+	b.Cache.IncrementInteractionCount(e.ChannelID)
 
-		if b.Cache.GetInteractionCount(e.ChannelID) <= spawnThreshold {
-			return
-		}
+	if b.Cache.GetInteractionCount(e.ChannelID) <= spawnThreshold {
+		return
+	}
 
-		randomCharacter := entities.RandomCharacterSpawn()
-		b.Cache.SetChannelCharacter(e.ChannelID, randomCharacter)
+	randomCharacter := entities.RandomCharacterSpawn()
 
-		spawnEmbed := discord.NewEmbedBuilder().
-			SetTitlef("A wandering %v appeared!", randomCharacter.CharacterName()).
-			SetDescriptionf("Click the button below to add %v to your characters!", randomCharacter.CharacterName()).
-			SetColor(constants.ColorDefault)
+	spawnEmbed := discord.NewEmbedBuilder().
+		SetTitlef("A wandering %v appeared!", randomCharacter.CharacterName()).
+		SetDescriptionf("Click the button below to add %v to your characters!", randomCharacter.CharacterName()).
+		SetColor(constants.ColorDefault)
 
-		spawnImage, err := randomCharacter.Image()
-		if err != nil {
-			slog.Error("Failed to get character image", slog.Any("err", err))
-		} else {
-			spawnEmbed.SetImage("attachment://character.png")
-		}
-
-		_, err = e.Client().Rest().CreateMessage(e.ChannelID, discord.MessageCreate{
-			Embeds: []discord.Embed{spawnEmbed.Build()},
-			Files:  []*discord.File{spawnImage},
-		})
-
-		if err != nil {
-			slog.Error("Failed to send spawn message",
-				slog.String("channel_id", e.ChannelID.String()),
-				slog.String("guild_id", e.GuildID.String()),
-				slog.Int("character_id", randomCharacter.CharacterID),
-				slog.Any("err", err))
-
-			return
-		}
-
+	spawnImage, err := randomCharacter.Image()
+	if err != nil {
+		slog.Error("Failed to get character image", slog.Any("err", err))
 		b.Cache.ResetInteractionCount(e.ChannelID)
-	})
+		return
+	} else {
+		spawnEmbed.SetImage("attachment://character.png")
+	}
+
+	_, err = e.Client().Rest().CreateMessage(e.ChannelID,
+		discord.NewMessageCreateBuilder().
+			AddEmbeds(spawnEmbed.Build()).
+			AddFiles(spawnImage).
+			AddActionRow(discord.NewPrimaryButton("Claim", "/claim")).
+			Build(),
+	)
+
+	if err != nil {
+		slog.Error("Failed to send spawn message",
+			slog.String("channel_id", e.ChannelID.String()),
+			slog.String("guild_id", e.GuildID.String()),
+			slog.Int("character_id", randomCharacter.CharacterID),
+			slog.Any("err", err))
+
+		return
+	}
+
+	b.Cache.SetChannelCharacter(e.ChannelID, randomCharacter)
+	b.Cache.ResetInteractionCount(e.ChannelID)
 }

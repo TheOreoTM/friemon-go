@@ -56,9 +56,11 @@ func main() {
 		}
 	}
 
-	h.Component("/test-button", components.TestComponent)
+	for key, comp := range components.Components {
+		h.Component(key, comp(b))
+	}
 
-	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.XpHandler(b), handlers.SpawnHandler(b)); err != nil {
+	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.OnMessage(b)); err != nil {
 		slog.Error("Failed to setup bot", slog.Any("err", err))
 		os.Exit(-1)
 	}
