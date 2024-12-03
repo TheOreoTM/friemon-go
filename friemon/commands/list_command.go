@@ -37,7 +37,7 @@ func handlelist(b *friemon.Bot) handler.CommandHandler {
 		}
 
 		if len(characters) == 0 {
-			return e.CreateMessage(ErrorMessage("You don't have any characters"))
+			return e.CreateMessage(InfoMessage("You don't have any characters"))
 		}
 
 		dbUser, err := b.DB.GetUser(e.Ctx, e.Member().User.ID)
