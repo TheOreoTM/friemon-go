@@ -19,7 +19,7 @@ type Config struct {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("\n   Host: %s\n   Port: %d\n   Username: %s\n   Password: %s\n   Database: %s\n   SSLMode: %s",
+	return fmt.Sprintf("Host: %s\n   Port: %d\n   Username: %s\n   Password: %s\n   Database: %s\n   SSLMode: %s",
 		c.Host,
 		c.Port,
 		c.Username,

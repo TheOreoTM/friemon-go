@@ -19,7 +19,7 @@ import (
 	"github.com/theoreotm/friemon/friemon/memstore"
 )
 
-func New(cfg Config, version string, commit string, ctx context.Context) *Bot {
+func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	db, conn, err := db.NewDB(cfg.Database)
 	if err != nil {
 		slog.Error("failed to initialize database: %v", slog.String("err", err.Error()))
@@ -31,8 +31,7 @@ func New(cfg Config, version string, commit string, ctx context.Context) *Bot {
 	b := &Bot{
 		Cfg:       cfg,
 		Paginator: paginator.New(),
-		Version:   version,
-		Commit:    commit,
+		BuildInfo: buildInfo,
 		Context:   ctx,
 		conn:      conn,
 	}
@@ -49,10 +48,15 @@ type Bot struct {
 	Paginator *paginator.Manager
 	DB        *db.Queries
 	Cache     memstore.Cache
-	Version   string
-	Commit    string
+	BuildInfo BuildInfo
 	Context   context.Context
 	conn      *pgx.Conn
+}
+
+type BuildInfo struct {
+	Version string
+	Commit  string
+	Branch  string
 }
 
 func (b *Bot) SetupBot(listeners ...bot.EventListener) error {

@@ -23,7 +23,7 @@ var version = &Command{
 func handleVersion(b *friemon.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		return e.CreateMessage(discord.MessageCreate{
-			Content: fmt.Sprintf("Version: %s\nCommit: %s", b.Version, b.Commit),
+			Content: fmt.Sprintf("Version: %s\nCommit: %s\nBranch: %s", b.BuildInfo.Version, b.BuildInfo.Commit, b.BuildInfo.Branch),
 		})
 	}
 }

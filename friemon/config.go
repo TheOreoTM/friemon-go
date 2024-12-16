@@ -30,8 +30,11 @@ type Config struct {
 }
 
 type BotConfig struct {
-	DevGuilds []snowflake.ID `toml:"dev_guilds"`
-	Token     string         `toml:"token"`
+	DevGuilds    []snowflake.ID `toml:"dev_guilds"`
+	Token        string         `toml:"token"`
+	SyncCommands bool           `toml:"sync_commands"`
+	DevMode      bool           `toml:"dev_mode"`
+	Version      string         `toml:"version"`
 }
 
 type LogConfig struct {

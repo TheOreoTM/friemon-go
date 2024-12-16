@@ -25,6 +25,13 @@ var cmdList = &Command{
 	Cmd: discord.SlashCommandCreate{
 		Name:        "list",
 		Description: "Get a list of characters you own",
+		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionString{
+				Name:        "page",
+				Description: "The page you want to view",
+				Required:    false,
+			},
+		},
 	},
 	Handler: handlelist,
 }

@@ -20,35 +20,44 @@ import (
 )
 
 var (
-	version = "dev"
-	commit  = "unknown"
+	commit = "unknown"
+	branch = "unknown"
+	dev    = false
 )
 
 func main() {
-	shouldSyncCommands := flag.Bool("sync-commands", false, "Whether to sync commands to discord")
 	shouldNuke := flag.Bool("nuke", false, "Whether to nuke the database")
 	path := flag.String("config", "config.toml", "path to config")
+	flag.StringVar(&commit, "commit", "unknown", "commit")
+	flag.StringVar(&branch, "branch", "unknown", "branch")
 	flag.Parse()
 
 	cfg, err := friemon.LoadConfig(*path)
 	setupLogger(cfg.Log)
+
+	dev = cfg.Bot.DevMode
+	shouldSyncCommands := cfg.Bot.SyncCommands
 
 	if err != nil {
 		slog.Error("Failed to read config", slog.Any("err", err))
 		os.Exit(-1)
 	}
 
-	slog.Info("Starting friemon...", slog.String("version", version), slog.String("commit", commit))
-	slog.Info("Syncing commands", slog.Bool("sync", *shouldSyncCommands))
+	slog.Info("Starting friemon...", slog.String("version", cfg.Bot.Version), slog.String("commit", commit), slog.String("branch", branch))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	b := friemon.New(*cfg, version, commit, ctx)
-
+	buildInfo := friemon.BuildInfo{
+		Version: cfg.Bot.Version,
+		Commit:  commit,
+		Branch:  branch,
+	}
+	b := friemon.New(*cfg, buildInfo, ctx)
 	h := handler.New()
+
 	for _, cmd := range commands.Commands {
-		slog.Info("Registering command", slog.String("command", cmd.Cmd.CommandName()))
+		slog.Debug("Registering command", slog.String("command", cmd.Cmd.CommandName()))
 		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
 
 		if cmd.Autocomplete != nil {
@@ -75,7 +84,7 @@ func main() {
 		}
 	}()
 
-	if *shouldSyncCommands {
+	if shouldSyncCommands {
 		var cmds []discord.ApplicationCommandCreate
 		for _, cmd := range commands.Commands {
 			cmds = append(cmds, cmd.Cmd)
@@ -107,9 +116,14 @@ func main() {
 }
 
 func setupLogger(cfg friemon.LogConfig) {
+	level := cfg.Level
+	if dev {
+		level = slog.LevelDebug
+	}
+
 	opts := &slog.HandlerOptions{
 		AddSource: cfg.AddSource,
-		Level:     cfg.Level,
+		Level:     level,
 	}
 
 	var sHandler slog.Handler
