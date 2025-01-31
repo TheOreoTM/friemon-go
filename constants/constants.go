@@ -138,3 +138,16 @@ const (
 	ColorLoading int = 0x23272a
 	ColorDefault int = 0x2b2d31
 )
+
+// StatusEffect represents possible status effects for a character.
+type StatusEffect string
+
+const (
+	StatusNone     StatusEffect = "None"     // No status effect
+	StatusPoison   StatusEffect = "Poison"   // Gradual HP loss each turn
+	StatusBurn     StatusEffect = "Burn"     // Gradual HP loss + reduced attack
+	StatusParalyze StatusEffect = "Paralyze" // Reduced speed + chance to skip turn
+	StatusSleep    StatusEffect = "Sleep"    // Cannot act for a few turns
+	StatusFreeze   StatusEffect = "Freeze"   // Cannot act until thawed
+	StatusConfuse  StatusEffect = "Confuse"  // Chance to hurt self
+)

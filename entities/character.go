@@ -13,15 +13,6 @@ import (
 	"github.com/theoreotm/friemon/constants"
 )
 
-type BattleStats struct {
-	CurrentHP int
-	AtkMod    int
-	DefMod    int
-	SpAtkMod  int
-	SpDefMod  int
-	SpeMod    int
-}
-
 type Character struct {
 	ID               uuid.UUID // Database ID
 	OwnerID          string    // Snowflake ID of the owner
@@ -49,7 +40,10 @@ type Character struct {
 	Moves     []int32 // The moves of the character TODO: Type this field
 	Color     int32
 
-	BattleStats *BattleStats
+	// Battle relevent fields
+	BattleStats *BattleStats // The battle stats of the character
+	ActiveMoves []int        // The active moves of the character
+	IsInBattle  bool         // Whether the character is in a battle or not
 }
 
 func RandomPersonality() constants.Personality {
@@ -237,12 +231,32 @@ func (c *Character) SetHP(hp int) {
 	c.BattleStats.CurrentHP = hp
 }
 
+func (c *Character) CanUseMove(moveID int) bool {
+	return c.ActiveMoves[moveID] > 0
+}
+
+func (c *Character) UseMove(moveID int) error {
+	if c.CanUseMove(moveID) {
+		c.ActiveMoves[moveID]--
+		return nil
+	}
+	return fmt.Errorf("Move %d is not usable", moveID)
+}
+
+func (c *Character) CalculateTurnPriority() {
+	baseSpeed := c.Spd()
+	c.BattleStats.TurnPriority = baseSpeed + rand.Intn(10) // Add random factor
+}
+
 func (c *Character) InitializeBattleStats() {
 	c.BattleStats = &BattleStats{}
 }
 
-func (c *Character) ResetBattleStats() {
-	c.BattleStats = nil
+func (c *Character) ResetAfterBattle() {
+	c.BattleStats = &BattleStats{
+		CurrentHP: c.MaxHP(),
+	}
+	c.IsInBattle = false
 }
 
 // contains checks if a rune exists in the spec string.
