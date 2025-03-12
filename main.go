@@ -26,11 +26,27 @@ var (
 )
 
 func main() {
+	// Set up initial basic logging
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+
 	shouldNuke := flag.Bool("nuke", false, "Whether to nuke the database")
 	path := flag.String("config", "config.toml", "path to config")
 	flag.StringVar(&commit, "commit", "unknown", "commit")
 	flag.StringVar(&branch, "branch", "unknown", "branch")
 	flag.Parse()
+
+	// Log the working directory and config path
+	wd, _ := os.Getwd()
+	slog.Info("Current working directory", "path", wd)
+	slog.Info("Loading config from", "path", *path)
+
+	// Check if config file exists
+	if _, err := os.Stat(*path); os.IsNotExist(err) {
+		slog.Error("Config file does not exist", "path", *path)
+		os.Exit(-1)
+	}
 
 	cfg, err := friemon.LoadConfig(*path)
 	if err != nil {
@@ -41,6 +57,14 @@ func main() {
 	setupLogger(cfg.Log)
 	dev = cfg.Bot.DevMode
 	shouldSyncCommands := cfg.Bot.SyncCommands
+
+	// Log environment variables
+	slog.Debug("Environment variables",
+		"BOT_TOKEN", os.Getenv("BOT_TOKEN") != "",
+		"DB_HOST", os.Getenv("DB_HOST"),
+		"DB_USER", os.Getenv("DB_USER"),
+		"REDIS_ADDR", os.Getenv("REDIS_ADDR"),
+	)
 
 	slog.Info("Starting friemon...", slog.String("version", cfg.Bot.Version), slog.String("commit", commit), slog.String("branch", branch))
 
