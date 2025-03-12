@@ -48,12 +48,23 @@ check_status "Starting containers"
 
 # Wait for PostgreSQL to be ready
 echo "⏳ Waiting for PostgreSQL to be ready..."
-sleep 5  # Give PostgreSQL a moment to start
+max_attempts=30
+attempt=1
+while ! docker-compose exec postgres pg_isready -U friemon -d friemon >/dev/null 2>&1; do
+    if [ $attempt -eq $max_attempts ]; then
+        echo "❌ PostgreSQL failed to become ready in time"
+        exit 1
+    fi
+    echo "Waiting for PostgreSQL... (attempt $attempt/$max_attempts)"
+    sleep 2
+    attempt=$((attempt + 1))
+done
+echo "✅ PostgreSQL is ready"
 
 # Run database migrations
 echo "🔄 Running database migrations..."
 cd friemon && migrate \
-    -database "postgres://friemon:friemonpass@localhost:5432/friemon?sslmode=disable" \
+    -database "postgres://friemon:friemonpass@postgres:5432/friemon?sslmode=disable" \
     -path db/migrations up
 check_status "Database migrations"
 cd ..
