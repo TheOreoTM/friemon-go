@@ -3,6 +3,7 @@ version: '3.8'
 services:
   bot:
     build: .
+    container_name: friemon_bot
     depends_on:
       - redis
       - postgres
@@ -32,23 +33,25 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: friemon_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     command: redis-server --appendonly yes
     restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
+    container_name: friemon_postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-friemon}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-friemonpass}
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
