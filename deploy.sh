@@ -37,6 +37,18 @@ echo "🚀 Starting containers..."
 docker-compose up -d
 check_status "Starting containers"
 
+# Wait for PostgreSQL to be ready
+echo "⏳ Waiting for PostgreSQL to be ready..."
+sleep 5  # Give PostgreSQL a moment to start
+
+# Run database migrations
+echo "🔄 Running database migrations..."
+cd friemon && go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
+    -database "postgres://friemon:friemonpass@localhost:5432/friemon?sslmode=disable" \
+    -path db/migrations up
+check_status "Database migrations"
+cd ..
+
 # Show recent logs
 echo "📋 Showing recent logs..."
 echo "--------------------"
