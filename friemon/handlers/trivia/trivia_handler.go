@@ -1,13 +1,16 @@
-package handlers
+package trivia
 
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/theoreotm/friemon/friemon"
 	"github.com/theoreotm/friemon/friemon/db"
 )
@@ -24,10 +27,16 @@ type TriviaHandler struct {
 	ctx   context.Context
 }
 
-func NewTriviaHandler(bot *friemon.Bot, redis *db.RedisClient) *TriviaHandler {
+func NewTriviaHandler(bot *friemon.Bot, redis *redis.Client) *TriviaHandler {
+	redisClient, err := db.NewRedisClient(redis.Options().Addr, redis.Options().Password, redis.Options().DB)
+	if err != nil {
+		slog.Error("failed to initialize redis client: %v", slog.String("err", err.Error()))
+		os.Exit(-1)
+	}
+
 	return &TriviaHandler{
 		bot:   bot,
-		redis: redis,
+		redis: redisClient,
 		ctx:   context.Background(),
 	}
 }
