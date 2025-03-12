@@ -26,8 +26,9 @@ WORKDIR /app
 # Install ca-certificates for HTTPS
 RUN apk --no-cache add ca-certificates
 
-# Copy the binary from builder
+# Copy the binary and config from builder
 COPY --from=builder /app/friemon .
+COPY --from=builder /app/config.toml .
 
 # Run the application
-CMD ["./friemon", "--config", "./config.toml"] 
+CMD ["./friemon"] 
