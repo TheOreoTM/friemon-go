@@ -29,16 +29,20 @@ services:
       - REDIS_ADDR=redis:6379
       - REDIS_PASSWORD=
       - REDIS_DB=0
+    networks:
+      - friemon_net
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     container_name: friemon_redis
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - ./data/redis:/data
     command: redis-server --appendonly yes
+    networks:
+      - friemon_net
     restart: unless-stopped
 
   postgres:
@@ -49,11 +53,18 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-friemonpass}
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - friemon_net
     restart: unless-stopped
 
 volumes:
   redis_data:
   postgres_data:
+
+
+networks:
+  friemon_net:
+    driver: bridge
