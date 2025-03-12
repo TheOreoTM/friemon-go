@@ -15,6 +15,7 @@ import (
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/paginator"
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 	"github.com/theoreotm/friemon/friemon/db"
 	"github.com/theoreotm/friemon/friemon/memstore"
 )
@@ -28,12 +29,29 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 
 	slog.Info("Connected to database", slog.String("database", cfg.Database.String()))
 
+	// Initialize Redis client
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+
+	// Test Redis connection
+	_, err = redisClient.Ping(ctx).Result()
+	if err != nil {
+		slog.Error("failed to connect to Redis: %v", slog.String("err", err.Error()))
+		os.Exit(-1)
+	}
+
+	slog.Info("Connected to Redis", slog.String("addr", cfg.Redis.Addr))
+
 	b := &Bot{
 		Cfg:       cfg,
 		Paginator: paginator.New(),
 		BuildInfo: buildInfo,
 		Context:   ctx,
 		conn:      conn,
+		Redis:     redisClient,
 	}
 
 	b.DB = db
@@ -51,6 +69,7 @@ type Bot struct {
 	BuildInfo BuildInfo
 	Context   context.Context
 	conn      *pgx.Conn
+	Redis     *redis.Client
 }
 
 type BuildInfo struct {
@@ -77,6 +96,13 @@ func (b *Bot) SetupBot(listeners ...bot.EventListener) error {
 func (b *Bot) Close(ctx context.Context) error {
 	slog.Info("Closing friemon...")
 	b.Client.Close(ctx)
+
+	// Close Redis connection
+	slog.Info("Closing Redis connection...")
+	if err := b.Redis.Close(); err != nil {
+		return fmt.Errorf("error closing Redis connection: %w", err)
+	}
+
 	// Close pgx connection
 	slog.Info("Closing pgx connection...")
 	if err := b.conn.Close(ctx); err != nil {

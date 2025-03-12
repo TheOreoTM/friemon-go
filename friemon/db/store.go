@@ -21,6 +21,8 @@ type Store interface {
 	CreateUser(context.Context, snowflake.ID) (*entities.User, error)
 	GetSelectedCharacter(context.Context, snowflake.ID) (*entities.Character, error)
 
+	// Trivia
+
 	DeleteEverything(context.Context) error
 
 	Tx(context.Context, func(Store) error) error

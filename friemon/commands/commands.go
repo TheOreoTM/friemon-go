@@ -13,6 +13,7 @@ type Command struct {
 	Cmd          discord.ApplicationCommandCreate
 	Handler      func(b *friemon.Bot) handler.CommandHandler
 	Autocomplete func(b *friemon.Bot) handler.AutocompleteHandler
+	Category     string
 }
 
 func SuccessMessage(title, desc string) discord.MessageCreate {

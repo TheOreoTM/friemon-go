@@ -17,7 +17,8 @@ var version = &Command{
 		Name:        "version",
 		Description: "version command",
 	},
-	Handler: handleVersion,
+	Handler:  handleVersion,
+	Category: "Bot",
 }
 
 func handleVersion(b *friemon.Bot) handler.CommandHandler {

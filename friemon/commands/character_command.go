@@ -18,7 +18,8 @@ var cmdCharacter = &Command{
 		Name:        "character",
 		Description: "Generate a random character",
 	},
-	Handler: handleCharacter,
+	Handler:  handleCharacter,
+	Category: "Friemon",
 }
 
 func handleCharacter(b *friemon.Bot) handler.CommandHandler {

@@ -29,6 +29,7 @@ var cmdSelect = &Command{
 	},
 	Handler:      handleSelect,
 	Autocomplete: handleGetCharacterAutocomplete,
+	Category:     "Friemon",
 }
 
 func handleSelect(b *friemon.Bot) handler.CommandHandler {

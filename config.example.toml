@@ -11,3 +11,24 @@ add_source = true
 dev_guilds = []
 # the bot token
 token = "..."
+# whether to sync commands on startup
+sync_commands = true
+# whether to run in dev mode
+dev_mode = false
+# version of the bot
+version = "1.0.0"
+
+[database]
+# PostgreSQL connection settings
+host = "postgres"
+port = 5432
+user = "friemon"
+password = "friemonpass"
+dbname = "friemon"
+sslmode = "disable"
+
+[redis]
+# Redis connection settings
+addr = "redis:6379"
+password = ""
+db = 0

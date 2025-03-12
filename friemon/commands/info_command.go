@@ -31,6 +31,7 @@ var cmdInfo = &Command{
 	},
 	Autocomplete: handleGetCharacterAutocomplete,
 	Handler:      handleInfo,
+	Category:     "Friemon",
 }
 
 func handleInfo(b *friemon.Bot) handler.CommandHandler {

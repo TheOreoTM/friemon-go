@@ -33,7 +33,8 @@ var cmdList = &Command{
 			},
 		},
 	},
-	Handler: handlelist,
+	Handler:  handlelist,
+	Category: "Friemon",
 }
 
 func handlelist(b *friemon.Bot) handler.CommandHandler {

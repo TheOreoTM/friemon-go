@@ -25,6 +25,7 @@ var test = &Command{
 	},
 	Handler:      handleTest,
 	Autocomplete: handleTestAutocomplete,
+	Category:     "Friemon",
 }
 
 func handleTest(b *friemon.Bot) handler.CommandHandler {
