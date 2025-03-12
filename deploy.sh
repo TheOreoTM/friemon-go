@@ -12,6 +12,15 @@ check_status() {
     fi
 }
 
+# Check if migrate CLI is installed
+if ! command -v migrate &> /dev/null; then
+    echo "📦 Installing migrate CLI tool..."
+    curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+    sudo mv migrate /usr/local/bin/
+    rm -f README.md LICENSE
+    check_status "Installing migrate CLI"
+fi
+
 # Pull latest changes
 echo "📥 Pulling latest changes from git..."
 git pull
@@ -43,7 +52,7 @@ sleep 5  # Give PostgreSQL a moment to start
 
 # Run database migrations
 echo "🔄 Running database migrations..."
-cd friemon && go run github.com/golang-migrate/migrate/v4/cmd/migrate@latest \
+cd friemon && migrate \
     -database "postgres://friemon:friemonpass@localhost:5432/friemon?sslmode=disable" \
     -path db/migrations up
 check_status "Database migrations"
