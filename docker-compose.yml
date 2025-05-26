@@ -50,7 +50,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6378:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -71,7 +71,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-friemonpass}
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5431:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
