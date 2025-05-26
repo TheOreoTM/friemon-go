@@ -23,9 +23,6 @@ RUN go mod download
 # Copy the entire source code into the container
 COPY . .
 
-# Copy the assets directory
-COPY assets /app/assets  
-
 # Build the application, creating a static binary.
 # Build arguments can be passed to embed version info into the binary.
 ARG COMMIT=unknown
@@ -45,6 +42,8 @@ WORKDIR /app
 # Copy the built binary and the example config file from the builder stage
 COPY --from=builder /friemon /app/friemon
 COPY config.example.toml /app/config.toml
+# Copy the assets directory
+COPY ./assets /app/assets
 
 # Assign ownership of the application files to the non-root user
 RUN chown -R appuser:appgroup /app
