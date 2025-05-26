@@ -5,23 +5,21 @@ services:
   bot:
     build:
       context: .
-      # Pass build arguments to embed git info into the binary
       args:
         COMMIT: ${COMMIT:-unknown}
         BRANCH: ${BRANCH:-unknown}
     container_name: friemon_bot
     restart: unless-stopped
+    # The bot now depends on both postgres and redis being healthy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      # It's recommended to use environment variables to configure the bot,
-      # as they override the values in config.toml
       - TZ=UTC
-      # Log settings
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - LOG_FORMAT=${LOG_FORMAT:-text}
-      # Bot settings
       - BOT_TOKEN=${BOT_TOKEN:?err_bot_token_not_set}
-      - BOT_SYNC_COMMANDS=${BOT_SYNC_COMMANDS:-true}
-      - BOT_DEV_MODE=${BOT_DEV_MODE:-false}
       # Database connection settings
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -35,31 +33,6 @@ services:
       - REDIS_DB=${REDIS_DB:-0}
     networks:
       - friemon_net
-    # depends_on with condition ensures the bot only starts after its
-    # dependencies are healthy and ready to accept connections.
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  # Redis service for caching and transient data storage
-  redis:
-    image: redis:7.2-alpine
-    container_name: friemon_redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    ports:
-      - "127.0.0.1:6378:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - friemon_net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # PostgreSQL service for persistent data storage
   postgres:
@@ -71,9 +44,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-friemonpass}
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
     ports:
-      - "127.0.0.1:5431:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     networks:
       - friemon_net
     healthcheck:
@@ -82,11 +55,30 @@ services:
       timeout: 5s
       retries: 5
 
-# Define the network for inter-service communication
+  # Redis service for caching and transient data storage
+  redis:
+    image: redis:7.2-alpine
+    container_name: friemon_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    # No need to expose the Redis port to the host unless you want to connect from the host
+    # ports:
+    #   - "127.0.0.1:6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - friemon_net
+    # This healthcheck ensures Redis is responsive before the bot starts
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   friemon_net:
     driver: bridge
-
+    
 # Define named volumes for persistent data
 volumes:
   postgres_data:
