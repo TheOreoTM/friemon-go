@@ -6,6 +6,7 @@ FROM golang:1.23-alpine AS builder
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
+ENV ASSETS_DIR=/app/assets 
 
 # Install git, which is required to fetch dependencies
 RUN apk add --no-cache git

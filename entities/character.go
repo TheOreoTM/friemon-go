@@ -79,7 +79,13 @@ func (c *Character) Image() (*discord.File, error) {
 		return file, nil
 	}
 
-	loa, err := loadImage(fmt.Sprintf("./assets/characters/%v.png", c.CharacterID))
+	assetsDir := os.Getenv("ASSETS_DIR")
+	if assetsDir == "" {
+		assetsDir = "./assets" //  Default if not set (for local runs?)
+	}
+	fmt.Print(assetsDir)
+	filePath := fmt.Sprintf("%s/characters/%v.png", assetsDir, c.CharacterID)
+	loa, err := loadImage(filePath)
 	if err != nil {
 		return nil, err
 	}
