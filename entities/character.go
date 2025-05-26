@@ -3,6 +3,7 @@ package entities
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"math/rand"
 	"os"
@@ -83,7 +84,7 @@ func (c *Character) Image() (*discord.File, error) {
 	if assetsDir == "" {
 		assetsDir = "./assets" //  Default if not set (for local runs?)
 	}
-	fmt.Print(assetsDir)
+	slog.Info("Assets dir", "path", assetsDir)
 	filePath := fmt.Sprintf("%s/characters/%v.png", assetsDir, c.CharacterID)
 	loa, err := loadImage(filePath)
 	if err != nil {
