@@ -20,6 +20,9 @@ services:
       - TZ=UTC
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - BOT_TOKEN=${BOT_TOKEN:?err_bot_token_not_set}
+      - BOT_SYNC_COMMANDS=${SYNC_COMMANDS:-true}
+      - BOT_VERSION=${VERSION:-unknown}
+      - BOT_DEV_MODE=${DEV_MODE:-false}
       # Database connection settings
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -78,7 +81,7 @@ services:
 networks:
   friemon_net:
     driver: bridge
-    
+
 # Define named volumes for persistent data
 volumes:
   postgres_data:
