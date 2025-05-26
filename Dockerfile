@@ -22,6 +22,9 @@ RUN go mod download
 # Copy the entire source code into the container
 COPY . .
 
+# Copy the assets directory
+COPY assets /app/assets  
+
 # Build the application, creating a static binary.
 # Build arguments can be passed to embed version info into the binary.
 ARG COMMIT=unknown
