@@ -64,7 +64,7 @@ echo "✅ PostgreSQL is ready"
 # Run database migrations
 echo "🔄 Running database migrations..."
 cd friemon && migrate \
-    -database "postgres://friemon:friemonpass@postgres:5432/friemon?sslmode=disable" \
+    -database "postgres://friemon:friemonpass@postgres:5431/friemon?sslmode=disable" \
     -path db/migrations up
 check_status "Database migrations"
 cd ..
