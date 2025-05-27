@@ -82,7 +82,7 @@ func (c *Character) Image() (*discord.File, error) {
 
 	assetsDir := os.Getenv("ASSETS_DIR")
 	if assetsDir == "" {
-		assetsDir = "./assets" //  Default if not set (for local runs?)
+		assetsDir = "./assets"
 	}
 	slog.Info("Assets dir", "path", assetsDir)
 	filePath := fmt.Sprintf("%s/characters/%v.png", assetsDir, c.CharacterID)

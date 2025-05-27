@@ -55,7 +55,11 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	}
 
 	b.DB = db
-	b.Cache = memstore.NewMemoryCache()
+	b.Cache, err = memstore.NewRedisCache(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	if err != nil {
+		slog.Error("Failed to create Redis cache", slog.Any("err", err))
+		os.Exit(-1)
+	}
 
 	return b
 }

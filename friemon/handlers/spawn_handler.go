@@ -42,7 +42,7 @@ func spawnCharacter(b *friemon.Bot, e *events.MessageCreate) {
 		discord.NewMessageCreateBuilder().
 			AddEmbeds(spawnEmbed.Build()).
 			AddFiles(spawnImage).
-			AddActionRow(discord.NewPrimaryButton("Claim", "/claim")).
+			AddActionRow(discord.NewPrimaryButton("Invite to party", "/claim")).
 			Build(),
 	)
 

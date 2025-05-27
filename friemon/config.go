@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/pelletier/go-toml/v2"
@@ -51,6 +52,13 @@ func (c *Config) overrideWithEnv() {
 		c.Log.AddSource, _ = strconv.ParseBool(addSource)
 	}
 
+	if timezone := os.Getenv("TZ"); timezone != "" {
+		c.Timezone = timezone
+	}
+	if assetsDir := os.Getenv("ASSETS_DIR"); assetsDir != "" {
+		c.AssetsDir = assetsDir
+	}
+
 	// Bot config
 	if token := os.Getenv("BOT_TOKEN"); token != "" {
 		c.Bot.Token = token
@@ -63,6 +71,9 @@ func (c *Config) overrideWithEnv() {
 	}
 	if version := os.Getenv("BOT_VERSION"); version != "" {
 		c.Bot.Version = version
+	}
+	if devGuilds := os.Getenv("BOT_DEV_GUILDS"); devGuilds != "" {
+		c.Bot.DevGuilds = stringsToSnowflakeIDs(devGuilds)
 	}
 
 	// Database config
@@ -98,10 +109,12 @@ func (c *Config) overrideWithEnv() {
 }
 
 type Config struct {
-	Log      LogConfig   `toml:"log"`
-	Bot      BotConfig   `toml:"bot"`
-	Database db.Config   `toml:"database"`
-	Redis    RedisConfig `toml:"redis"`
+	Timezone  string      `toml:"timezone"`
+	AssetsDir string      `toml:"assets_dir"`
+	Log       LogConfig   `toml:"log"`
+	Bot       BotConfig   `toml:"bot"`
+	Database  db.Config   `toml:"database"`
+	Redis     RedisConfig `toml:"redis"`
 }
 
 type BotConfig struct {
@@ -122,4 +135,25 @@ type RedisConfig struct {
 	Addr     string `toml:"addr"`
 	Password string `toml:"password"`
 	DB       int    `toml:"db"`
+}
+
+func stringsToSnowflakeIDs(ids string) []snowflake.ID {
+	ids = strings.TrimSpace(ids)
+	if ids == "" {
+		return nil
+	}
+	var snowflakeIDs []snowflake.ID
+	for _, id := range strings.Split(ids, ",") {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		snowflakeID, err := snowflake.Parse(id)
+		if err != nil {
+			slog.Error("Failed to parse snowflake ID", slog.String("id", id), slog.Any("err", err))
+			continue
+		}
+		snowflakeIDs = append(snowflakeIDs, snowflakeID)
+	}
+	return snowflakeIDs
 }
