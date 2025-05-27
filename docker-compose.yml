@@ -10,7 +10,6 @@ services:
         BRANCH: ${BRANCH:-unknown}
     container_name: friemon_bot
     restart: unless-stopped
-    # The bot now depends on both postgres and redis being healthy
     depends_on:
       postgres:
         condition: service_healthy
@@ -20,9 +19,6 @@ services:
       - TZ=UTC
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - BOT_TOKEN=${BOT_TOKEN:?err_bot_token_not_set}
-      - BOT_SYNC_COMMANDS=${SYNC_COMMANDS:-true}
-      - BOT_VERSION=${VERSION:-unknown}
-      - BOT_DEV_MODE=${DEV_MODE:-false}
       # Database connection settings
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -46,10 +42,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-friemon}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-friemonpass}
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
+    # Port is exposed to the host so pgAdmin and the migrate CLI can connect.
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      # Use a named volume for better data management
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - friemon_net
     healthcheck:
@@ -64,25 +62,60 @@ services:
     container_name: friemon_redis
     restart: unless-stopped
     command: redis-server --appendonly yes
-    # No need to expose the Redis port to the host unless you want to connect from the host
-    # ports:
-    #   - "127.0.0.1:6379:6379"
     volumes:
-      - ./data/redis:/data
+      # Use a named volume for better data management
+      - redis_data:/data
     networks:
       - friemon_net
-    # This healthcheck ensures Redis is responsive before the bot starts
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-networks:
-  friemon_net:
-    driver: bridge
+  # NEW: pgAdmin service for managing the PostgreSQL database
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: friemon_pgadmin
+    restart: unless-stopped
+    environment:
+      # Set your desired login credentials for the pgAdmin web interface
+      PGADMIN_DEFAULT_EMAIL: "admin@example.com"
+      PGADMIN_DEFAULT_PASSWORD: "admin"
+    ports:
+      # Expose pgAdmin on host port 5050
+      - "5050:80"
+    volumes:
+      # Persist pgAdmin's configuration and server list
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - friemon_net
+    depends_on:
+      - postgres
 
-# Define named volumes for persistent data
+  # NEW: Redis Commander service for managing the Redis database
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: friemon_redis_commander
+    restart: unless-stopped
+    environment:
+      # Tells Redis Commander where to find the redis server.
+      # 'redis' is the service name from this file.
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      # Expose Redis Commander on host port 8081
+      - "8081:8081"
+    networks:
+      - friemon_net
+    depends_on:
+      - redis
+
+# Use named volumes for all persistent data
 volumes:
   postgres_data:
   redis_data:
+  pgadmin_data:
+
+networks:
+  friemon_net:
+    driver: bridge
