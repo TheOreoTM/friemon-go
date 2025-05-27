@@ -1,0 +1,144 @@
+name: Friemon CI/CD Pipeline
+
+on:
+    push:
+        branches:
+            - main # Triggers on push to the main branch
+    pull_request:
+        branches:
+            - main # Triggers on pull requests targeting the main branch
+
+env:
+    # Define environment variables accessible in all jobs
+    # Use your actual image name on Docker Hub or GHCR
+    DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/friemon-bot # Example for Docker Hub
+    # For GHCR, it would be: ghcr.io/${{ github.repository_owner }}/friemon-bot
+
+jobs:
+    build-and-test:
+        name: Build, Test, and Push Docker Image
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            packages: write # Required for pushing to GHCR
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Go
+              uses: actions/setup-go@v5
+              with:
+                  go-version: "1.22" # Use the Go version from your go.mod
+
+            - name: Install golangci-lint
+              run: curl -sSfL [https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh](https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh) | sh -s -- -b $(go env GOPATH)/bin v1.57.2 # Or your preferred version
+
+            - name: Run linters
+              run: $(go env GOPATH)/bin/golangci-lint run ./...
+
+            - name: Run tests
+              run: go test -v ./...
+
+            - name: Generate SQLC code
+              # Assuming sqlc is installed in your Dockerfile or you install it here
+              # If not, you might need to run this step inside a container that has sqlc
+              # or install it: go install [github.com/sqlc-dev/sqlc/cmd/sqlc@latest](https://github.com/sqlc-dev/sqlc/cmd/sqlc@latest)
+              # For simplicity, this step assumes sqlc is available or generated before commit.
+              # If your Docker build relies on generated files, ensure they are present.
+              # Consider adding a step to install sqlc if needed:
+              # run: go install [github.com/sqlc-dev/sqlc/cmd/sqlc@latest](https://github.com/sqlc-dev/sqlc/cmd/sqlc@latest) && $(go env GOPATH)/bin/sqlc generate
+              run: echo "Skipping sqlc generate in CI, assuming it's done locally or in Dockerfile build"
+
+            - name: Get Git commit short SHA
+              id: commit
+              run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+            - name: Log in to Docker Hub
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only on push to main
+              uses: docker/login-action@v3
+              with:
+                  username: ${{ secrets.DOCKER_USERNAME }}
+                  password: ${{ secrets.DOCKER_PASSWORD }}
+
+            # Alternative: Log in to GitHub Container Registry
+            # - name: Log in to GitHub Container Registry
+            #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+            #   uses: docker/login-action@v3
+            #   with:
+            #     registry: ghcr.io
+            #     username: ${{ github.repository_owner }}
+            #     password: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN has write:packages permission
+
+            - name: Build and push Docker image
+              uses: docker/build-push-action@v5
+              with:
+                  context: .
+                  file: ./Dockerfile
+                  # Tags the image with 'latest' and the short commit SHA
+                  tags: |
+                      ${{ env.DOCKER_IMAGE_NAME }}:latest
+                      ${{ env.DOCKER_IMAGE_NAME }}:${{ steps.commit.outputs.sha_short }}
+                  # Push only when the event is a push to the main branch
+                  push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+                  # Pass commit and branch as build arguments to Dockerfile
+                  build-args: |
+                      COMMIT=${{ steps.commit.outputs.sha_short }}
+                      BRANCH=${{ github.ref_name }}
+
+    deploy:
+        name: Deploy to VPS
+        runs-on: ubuntu-latest
+        needs: build-and-test # This job runs only if build-and-test succeeds
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only on push to main
+
+        steps:
+            - name: Deploy to VPS via SSH
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                  host: ${{ secrets.VPS_SSH_HOST }}
+                  username: ${{ secrets.VPS_SSH_USER }}
+                  key: ${{ secrets.VPS_SSH_KEY }}
+                  port: 22 # Default SSH port, change if yours is different
+                  script: |
+                      set -e # Exit immediately if a command exits with a non-zero status.
+                      echo "Navigating to project directory..."
+                      cd /path/to/your/friemon-go # IMPORTANT: Update this to your project's path on the VPS
+
+                      echo "Setting environment variables for deployment..."
+                      export BOT_TOKEN="${{ secrets.BOT_TOKEN }}"
+                      export POSTGRES_USER="friemon" # Or from secrets if you prefer
+                      export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+                      export POSTGRES_DB="friemon" # Or from secrets
+                      export REDIS_PASSWORD="" # Or from secrets
+                      # Add any other environment variables your docker-compose.yml expects
+
+                      echo "Pulling latest Docker image..."
+                      docker pull ${{ env.DOCKER_IMAGE_NAME }}:latest
+
+                      echo "Stopping and removing old containers..."
+                      docker-compose down
+
+                      echo "Starting new containers..."
+                      # Pass environment variables needed by docker-compose
+                      # Note: docker-compose will also pick up .env file if present in the project directory
+                      # Ensure your docker-compose.yml is configured to use these env vars
+                      BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
+                      POSTGRES_USER="friemon" \
+                      POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}" \
+                      POSTGRES_DB="friemon" \
+                      PGADMIN_PASSWORD="${{ secrets.PGADMIN_PASSWORD }}" \
+                      docker-compose up -d --remove-orphans
+
+                      echo "Waiting for PostgreSQL to be ready..."
+                      # This is a simple wait; a more robust check might involve trying to connect
+                      sleep 15
+
+                      echo "Running database migrations..."
+                      # The migrate command needs to connect to the PostgreSQL instance.
+                      # Ensure the DB_USER and DB_PASSWORD here match what postgres service uses.
+                      # The hostname 'localhost' is used because the migrate CLI is run on the VPS itself,
+                      # connecting to the PostgreSQL port exposed on the VPS's localhost (127.0.0.1:5433).
+                      migrate -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" -path ./friemon/db/migrations up
+
+                      echo "Deployment successful!"
