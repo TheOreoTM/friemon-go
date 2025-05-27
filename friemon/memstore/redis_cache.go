@@ -129,7 +129,6 @@ func (c *RedisCache) Delete(key string) error {
 // The counter expires after 3 minutes of inactivity.
 func (c *RedisCache) IncrementInteractionCount(channelID snowflake.ID) error {
 	key := channelInteractionKey(channelID)
-	// INCR will create the key with value 1 if it doesn't exist.
 	pipe := c.client.Pipeline()
 	pipe.Incr(c.ctx, key)
 	pipe.Expire(c.ctx, key, 3*time.Minute) // Set/update expiration

@@ -24,7 +24,7 @@ func claimCharacterButton(b *friemon.Bot) handler.ComponentHandler {
 		if characterToClaim == nil {
 			e.Respond(discord.InteractionResponseTypeCreateMessage,
 				discord.NewMessageCreateBuilder().
-					SetContentf("No character to claim").
+					SetContentf("No character to invite").
 					Build())
 			return nil
 		}
@@ -40,7 +40,7 @@ func claimCharacterButton(b *friemon.Bot) handler.ComponentHandler {
 		if characterToClaim.OwnerID != "" {
 			e.Respond(discord.InteractionResponseTypeCreateMessage,
 				discord.NewMessageCreateBuilder().
-					SetContentf("This character has already been claimed.").
+					SetContentf("This character has already been invited.").
 					Build())
 			return nil
 		}
@@ -57,12 +57,12 @@ func claimCharacterButton(b *friemon.Bot) handler.ComponentHandler {
 			e.Message.ChannelID,
 			e.Message.ID,
 			discord.NewMessageUpdateBuilder().
-				AddActionRow(button.AsDisabled()).
+				AddActionRow(button.AsDisabled().WithLabel("Invited by "+e.Member().User.Username)).
 				Build())
 
 		e.Respond(discord.InteractionResponseTypeCreateMessage,
 			discord.NewMessageCreateBuilder().
-				SetContentf("Congratulations %v! You claimed a %v (%v)", e.Member(), characterToClaim.Format("l"), characterToClaim.IvPercentage()).
+				SetContentf("Congratulations %v! You invited a %v (%v) to the party!", e.Member(), characterToClaim.Format("l"), characterToClaim.IvPercentage()).
 				Build(),
 		)
 
