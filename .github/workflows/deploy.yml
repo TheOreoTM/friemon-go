@@ -103,7 +103,7 @@ jobs:
                   script: |
                       set -e # Exit immediately if a command exits with a non-zero status.
                       echo "Navigating to project directory..."
-                      cd /path/to/your/friemon-go # IMPORTANT: Update this to your project's path on the VPS
+                      cd ~/friemon-go
 
                       echo "Setting environment variables for deployment..."
                       export BOT_TOKEN="${{ secrets.BOT_TOKEN }}"
