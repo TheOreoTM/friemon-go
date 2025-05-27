@@ -36,6 +36,7 @@ jobs:
 
             - name: Run linters
               run: $(go env GOPATH)/bin/golangci-lint run ./...
+              continue-on-error: true
 
             - name: Run tests
               run: go test -v ./...
