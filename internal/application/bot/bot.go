@@ -13,14 +13,13 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
-	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/paginator"
-	"github.com/disgoorg/snowflake/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/theoreotm/friemon/internal/infrastructure/db"
 	"github.com/theoreotm/friemon/internal/infrastructure/memstore"
 	"github.com/theoreotm/friemon/internal/infrastructure/scheduler"
+	"github.com/theoreotm/friemon/internal/infrastructure/scheduler/tasks"
 )
 
 type Bot struct {
@@ -34,6 +33,14 @@ type Bot struct {
 	conn      *pgx.Conn
 	Redis     *redis.Client
 	Scheduler *scheduler.Scheduler
+}
+
+func (b *Bot) GetRestClient() tasks.RestClient {
+	return b.Client.Rest()
+}
+
+func (b *Bot) GetCache() tasks.CacheClient {
+	return b.Cache
 }
 
 func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
@@ -80,21 +87,6 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	return b
 }
 
-// Implement the dependencies interface for scheduler tasks
-func (b *Bot) GetRestClient() interface {
-	GetMessage(channelID, messageID snowflake.ID, opts ...rest.RequestOpt) (*discord.Message, error)
-	UpdateMessage(channelID, messageID snowflake.ID, messageUpdate discord.MessageUpdate, opts ...rest.RequestOpt) (*discord.Message, error)
-} {
-	return b.Client.Rest()
-}
-
-func (b *Bot) GetCache() interface {
-	DeleteChannelCharacter(channelID snowflake.ID) error
-	ResetInteractionCount(channelID snowflake.ID) error
-} {
-	return b.Cache
-}
-
 type BuildInfo struct {
 	Version string
 	Commit  string
@@ -113,6 +105,24 @@ func (b *Bot) SetupBot(listeners ...disgobot.EventListener) error {
 	}
 
 	b.Client = client
+
+	// Setup Asynq scheduler
+	scheduler, err := scheduler.SetupAsynqScheduler(
+		b.Redis.Options().Addr,
+		b.Redis.Options().Password,
+		b.Redis.Options().DB,
+		slog.Default(),
+		b,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to setup scheduler: %w", err)
+	}
+
+	b.Scheduler = scheduler
+	if err := b.Scheduler.Start(); err != nil {
+		return fmt.Errorf("failed to start scheduler: %w", err)
+	}
+
 	return nil
 }
 
@@ -138,6 +148,10 @@ func (b *Bot) Close(ctx context.Context) error {
 	slog.Info("Closing pgx connection...")
 	if err := b.conn.Close(ctx); err != nil {
 		return fmt.Errorf("error closing pgx connection: %w", err)
+	}
+
+	if err := b.Scheduler.Stop(); err != nil {
+		return fmt.Errorf("error stopping scheduler: %w", err)
 	}
 
 	return nil

@@ -2,31 +2,16 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/theoreotm/friemon/internal/types"
 )
 
-// TaskData represents flexible task data (copied from scheduler to avoid import cycle)
-type TaskData map[string]interface{}
-
-// Utility methods for TaskData
-func (td TaskData) MustString(key string) string {
-	val, ok := td[key]
-	if !ok {
-		panic(fmt.Sprintf("key %s not found or not string", key))
-	}
-	str, ok := val.(string)
-	if !ok {
-		panic(fmt.Sprintf("key %s is not a string", key))
-	}
-	return str
-}
-
-// Dependencies interface to avoid import cycles
 type BotDependencies interface {
 	GetRestClient() RestClient
 	GetCache() CacheClient
@@ -42,38 +27,48 @@ type CacheClient interface {
 	ResetInteractionCount(channelID snowflake.ID) error
 }
 
-// SpawnTaskHandlers contains handlers for spawn-related scheduled tasks
 type SpawnTaskHandlers struct {
 	deps BotDependencies
 }
 
 func NewSpawnTaskHandlers(deps BotDependencies) *SpawnTaskHandlers {
-	return &SpawnTaskHandlers{deps: deps}
+	return &SpawnTaskHandlers{
+		deps: deps,
+	}
 }
 
-func (h *SpawnTaskHandlers) DisableSpawnButton(ctx context.Context, data TaskData) error {
-	channelID := snowflake.MustParse(data.MustString("channel_id"))
-	messageID := snowflake.MustParse(data.MustString("message_id"))
+func (h *SpawnTaskHandlers) DisableSpawnButton(ctx context.Context, data types.TaskData) error {
+	channelIDStr := data.MustString("channel_id")
+	messageIDStr := data.MustString("message_id")
+
+	channelID, err := snowflake.Parse(channelIDStr)
+	if err != nil {
+		return fmt.Errorf("invalid channel_id: %w", err)
+	}
+
+	messageID, err := snowflake.Parse(messageIDStr)
+	if err != nil {
+		return fmt.Errorf("invalid message_id: %w", err)
+	}
 
 	slog.Info("Disabling spawn button",
-		slog.String("channel_id", channelID.String()),
-		slog.String("message_id", messageID.String()))
+		"channel_id", channelID,
+		"message_id", messageID,
+	)
 
-	// Get the message
-	message, err := h.deps.GetRestClient().GetMessage(channelID, messageID)
+	// Get the current message
+	restClient := h.deps.GetRestClient()
+	message, err := restClient.GetMessage(channelID, messageID)
 	if err != nil {
-		slog.Error("Failed to get message for spawn button disable", slog.Any("err", err))
-		return err
+		return fmt.Errorf("failed to get message: %w", err)
 	}
 
-	// Update button to disabled state
 	button, exists := message.ButtonByID("/claim")
 	if !exists {
-		slog.Error("Failed to find button to disable")
-		return nil
+		return errors.New("failed to find button")
 	}
 
-	_, err = h.deps.GetRestClient().UpdateMessage(
+	_, err = restClient.UpdateMessage(
 		channelID,
 		messageID,
 		discord.NewMessageUpdateBuilder().
@@ -81,26 +76,45 @@ func (h *SpawnTaskHandlers) DisableSpawnButton(ctx context.Context, data TaskDat
 			Build())
 
 	if err != nil {
-		slog.Error("Failed to disable spawn button", slog.Any("err", err))
-		return err
+		return fmt.Errorf("failed to update message: %w", err)
 	}
 
-	// Clean up cached character
-	h.deps.GetCache().DeleteChannelCharacter(channelID)
+	slog.Info("Successfully disabled spawn button",
+		"channel_id", channelID,
+		"message_id", messageID,
+	)
 
-	slog.Info("Successfully disabled spawn button")
 	return nil
 }
 
-func (h *SpawnTaskHandlers) CleanupChannel(ctx context.Context, data TaskData) error {
-	channelID := snowflake.MustParse(data.MustString("channel_id"))
+func (h *SpawnTaskHandlers) CleanupChannel(ctx context.Context, data types.TaskData) error {
+	channelIDStr := data.MustString("channel_id")
 
-	slog.Info("Starting channel cleanup", slog.String("channel_id", channelID.String()))
+	channelID, err := snowflake.Parse(channelIDStr)
+	if err != nil {
+		return fmt.Errorf("invalid channel_id: %w", err)
+	}
 
-	// Reset interaction count and clean up character data
-	h.deps.GetCache().ResetInteractionCount(channelID)
-	h.deps.GetCache().DeleteChannelCharacter(channelID)
+	slog.Debug("Cleaning up channel cache", "channel_id", channelID)
 
-	slog.Info("Channel cleanup completed")
+	cache := h.deps.GetCache()
+
+	// Clean up cached character
+	if err := cache.DeleteChannelCharacter(channelID); err != nil {
+		slog.Warn("Failed to delete cached character",
+			"channel_id", channelID,
+			"error", err,
+		)
+	}
+
+	// Reset interaction count
+	if err := cache.ResetInteractionCount(channelID); err != nil {
+		slog.Warn("Failed to reset interaction count",
+			"channel_id", channelID,
+			"error", err,
+		)
+	}
+
+	slog.Debug("Channel cleanup completed", "channel_id", channelID)
 	return nil
 }
