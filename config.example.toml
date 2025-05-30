@@ -21,7 +21,7 @@ version = "1.0.0"
 [database]
 # PostgreSQL connection settings
 host = "postgres"
-port = 5432
+port = 5433
 user = "friemon"
 password = "friemonpass"
 dbname = "friemon"

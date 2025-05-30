@@ -74,7 +74,7 @@ Follow these instructions to set up the project for local development and start 
 4.  **Run Database Migrations**
     After the `postgres` container is running and healthy, apply the database schema.
     ```bash
-    migrate -database "postgres://friemon:friemonpass@localhost:5432/friemon?sslmode=disable" -path ./friemon/db/migrations up
+    migrate -database "postgres://friemon:friemonpass@localhost:5433/friemon?sslmode=disable" -path ./friemon/db/migrations up
     ```
     *You may need to wait a few seconds for the database to initialize before running this command.*
 
