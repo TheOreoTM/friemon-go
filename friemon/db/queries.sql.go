@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createCharacter = `-- name: createCharacter :one
@@ -170,6 +171,79 @@ func (q *Queries) getCharacter(ctx context.Context, id uuid.UUID) (Character, er
 	return i, err
 }
 
+const getCharacterWithOwnerInfo = `-- name: getCharacterWithOwnerInfo :one
+SELECT 
+    c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
+    u.balance as owner_balance,
+    u.shinies_caught as owner_shinies_caught,
+    u.order_by as owner_order_by,
+    u.order_desc as owner_order_desc
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.id = $1
+`
+
+type getCharacterWithOwnerInfoRow struct {
+	ID                 uuid.UUID `json:"id"`
+	OwnerID            string    `json:"owner_id"`
+	ClaimedTimestamp   time.Time `json:"claimed_timestamp"`
+	Idx                int32     `json:"idx"`
+	CharacterID        int32     `json:"character_id"`
+	Level              int32     `json:"level"`
+	Xp                 int32     `json:"xp"`
+	Personality        string    `json:"personality"`
+	Shiny              bool      `json:"shiny"`
+	IvHp               int32     `json:"iv_hp"`
+	IvAtk              int32     `json:"iv_atk"`
+	IvDef              int32     `json:"iv_def"`
+	IvSpAtk            int32     `json:"iv_sp_atk"`
+	IvSpDef            int32     `json:"iv_sp_def"`
+	IvSpd              int32     `json:"iv_spd"`
+	IvTotal            float64   `json:"iv_total"`
+	Nickname           string    `json:"nickname"`
+	Favourite          bool      `json:"favourite"`
+	HeldItem           int32     `json:"held_item"`
+	Moves              []int32   `json:"moves"`
+	Color              int32     `json:"color"`
+	OwnerBalance       int32     `json:"owner_balance"`
+	OwnerShiniesCaught int32     `json:"owner_shinies_caught"`
+	OwnerOrderBy       int32     `json:"owner_order_by"`
+	OwnerOrderDesc     bool      `json:"owner_order_desc"`
+}
+
+func (q *Queries) getCharacterWithOwnerInfo(ctx context.Context, id uuid.UUID) (getCharacterWithOwnerInfoRow, error) {
+	row := q.db.QueryRow(ctx, getCharacterWithOwnerInfo, id)
+	var i getCharacterWithOwnerInfoRow
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.ClaimedTimestamp,
+		&i.Idx,
+		&i.CharacterID,
+		&i.Level,
+		&i.Xp,
+		&i.Personality,
+		&i.Shiny,
+		&i.IvHp,
+		&i.IvAtk,
+		&i.IvDef,
+		&i.IvSpAtk,
+		&i.IvSpDef,
+		&i.IvSpd,
+		&i.IvTotal,
+		&i.Nickname,
+		&i.Favourite,
+		&i.HeldItem,
+		&i.Moves,
+		&i.Color,
+		&i.OwnerBalance,
+		&i.OwnerShiniesCaught,
+		&i.OwnerOrderBy,
+		&i.OwnerOrderDesc,
+	)
+	return i, err
+}
+
 const getCharactersForUser = `-- name: getCharactersForUser :many
 SELECT id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color FROM characters WHERE owner_id = $1
 `
@@ -205,6 +279,165 @@ func (q *Queries) getCharactersForUser(ctx context.Context, ownerID string) ([]C
 			&i.HeldItem,
 			&i.Moves,
 			&i.Color,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCharactersWithOwnerInfo = `-- name: getCharactersWithOwnerInfo :many
+SELECT 
+    c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
+    u.balance as owner_balance,
+    u.shinies_caught as owner_shinies_caught
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1
+ORDER BY c.idx
+`
+
+type getCharactersWithOwnerInfoRow struct {
+	ID                 uuid.UUID `json:"id"`
+	OwnerID            string    `json:"owner_id"`
+	ClaimedTimestamp   time.Time `json:"claimed_timestamp"`
+	Idx                int32     `json:"idx"`
+	CharacterID        int32     `json:"character_id"`
+	Level              int32     `json:"level"`
+	Xp                 int32     `json:"xp"`
+	Personality        string    `json:"personality"`
+	Shiny              bool      `json:"shiny"`
+	IvHp               int32     `json:"iv_hp"`
+	IvAtk              int32     `json:"iv_atk"`
+	IvDef              int32     `json:"iv_def"`
+	IvSpAtk            int32     `json:"iv_sp_atk"`
+	IvSpDef            int32     `json:"iv_sp_def"`
+	IvSpd              int32     `json:"iv_spd"`
+	IvTotal            float64   `json:"iv_total"`
+	Nickname           string    `json:"nickname"`
+	Favourite          bool      `json:"favourite"`
+	HeldItem           int32     `json:"held_item"`
+	Moves              []int32   `json:"moves"`
+	Color              int32     `json:"color"`
+	OwnerBalance       int32     `json:"owner_balance"`
+	OwnerShiniesCaught int32     `json:"owner_shinies_caught"`
+}
+
+func (q *Queries) getCharactersWithOwnerInfo(ctx context.Context, ownerID string) ([]getCharactersWithOwnerInfoRow, error) {
+	rows, err := q.db.Query(ctx, getCharactersWithOwnerInfo, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []getCharactersWithOwnerInfoRow
+	for rows.Next() {
+		var i getCharactersWithOwnerInfoRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.ClaimedTimestamp,
+			&i.Idx,
+			&i.CharacterID,
+			&i.Level,
+			&i.Xp,
+			&i.Personality,
+			&i.Shiny,
+			&i.IvHp,
+			&i.IvAtk,
+			&i.IvDef,
+			&i.IvSpAtk,
+			&i.IvSpDef,
+			&i.IvSpd,
+			&i.IvTotal,
+			&i.Nickname,
+			&i.Favourite,
+			&i.HeldItem,
+			&i.Moves,
+			&i.Color,
+			&i.OwnerBalance,
+			&i.OwnerShiniesCaught,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFavouriteCharactersForUser = `-- name: getFavouriteCharactersForUser :many
+SELECT 
+    c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1 AND c.favourite = true
+ORDER BY c.idx
+`
+
+type getFavouriteCharactersForUserRow struct {
+	ID               uuid.UUID `json:"id"`
+	OwnerID          string    `json:"owner_id"`
+	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
+	Idx              int32     `json:"idx"`
+	CharacterID      int32     `json:"character_id"`
+	Level            int32     `json:"level"`
+	Xp               int32     `json:"xp"`
+	Personality      string    `json:"personality"`
+	Shiny            bool      `json:"shiny"`
+	IvHp             int32     `json:"iv_hp"`
+	IvAtk            int32     `json:"iv_atk"`
+	IvDef            int32     `json:"iv_def"`
+	IvSpAtk          int32     `json:"iv_sp_atk"`
+	IvSpDef          int32     `json:"iv_sp_def"`
+	IvSpd            int32     `json:"iv_spd"`
+	IvTotal          float64   `json:"iv_total"`
+	Nickname         string    `json:"nickname"`
+	Favourite        bool      `json:"favourite"`
+	HeldItem         int32     `json:"held_item"`
+	Moves            []int32   `json:"moves"`
+	Color            int32     `json:"color"`
+	OwnerBalance     int32     `json:"owner_balance"`
+}
+
+func (q *Queries) getFavouriteCharactersForUser(ctx context.Context, ownerID string) ([]getFavouriteCharactersForUserRow, error) {
+	rows, err := q.db.Query(ctx, getFavouriteCharactersForUser, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []getFavouriteCharactersForUserRow
+	for rows.Next() {
+		var i getFavouriteCharactersForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.ClaimedTimestamp,
+			&i.Idx,
+			&i.CharacterID,
+			&i.Level,
+			&i.Xp,
+			&i.Personality,
+			&i.Shiny,
+			&i.IvHp,
+			&i.IvAtk,
+			&i.IvDef,
+			&i.IvSpAtk,
+			&i.IvSpDef,
+			&i.IvSpd,
+			&i.IvTotal,
+			&i.Nickname,
+			&i.Favourite,
+			&i.HeldItem,
+			&i.Moves,
+			&i.Color,
+			&i.OwnerBalance,
 		); err != nil {
 			return nil, err
 		}
@@ -253,6 +486,168 @@ func (q *Queries) getSelectedCharacter(ctx context.Context, id string) (Characte
 	return i, err
 }
 
+const getShinyCharactersForUser = `-- name: getShinyCharactersForUser :many
+SELECT 
+    c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1 AND c.shiny = true
+ORDER BY c.idx
+`
+
+type getShinyCharactersForUserRow struct {
+	ID               uuid.UUID `json:"id"`
+	OwnerID          string    `json:"owner_id"`
+	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
+	Idx              int32     `json:"idx"`
+	CharacterID      int32     `json:"character_id"`
+	Level            int32     `json:"level"`
+	Xp               int32     `json:"xp"`
+	Personality      string    `json:"personality"`
+	Shiny            bool      `json:"shiny"`
+	IvHp             int32     `json:"iv_hp"`
+	IvAtk            int32     `json:"iv_atk"`
+	IvDef            int32     `json:"iv_def"`
+	IvSpAtk          int32     `json:"iv_sp_atk"`
+	IvSpDef          int32     `json:"iv_sp_def"`
+	IvSpd            int32     `json:"iv_spd"`
+	IvTotal          float64   `json:"iv_total"`
+	Nickname         string    `json:"nickname"`
+	Favourite        bool      `json:"favourite"`
+	HeldItem         int32     `json:"held_item"`
+	Moves            []int32   `json:"moves"`
+	Color            int32     `json:"color"`
+	OwnerBalance     int32     `json:"owner_balance"`
+}
+
+func (q *Queries) getShinyCharactersForUser(ctx context.Context, ownerID string) ([]getShinyCharactersForUserRow, error) {
+	rows, err := q.db.Query(ctx, getShinyCharactersForUser, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []getShinyCharactersForUserRow
+	for rows.Next() {
+		var i getShinyCharactersForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.ClaimedTimestamp,
+			&i.Idx,
+			&i.CharacterID,
+			&i.Level,
+			&i.Xp,
+			&i.Personality,
+			&i.Shiny,
+			&i.IvHp,
+			&i.IvAtk,
+			&i.IvDef,
+			&i.IvSpAtk,
+			&i.IvSpDef,
+			&i.IvSpd,
+			&i.IvTotal,
+			&i.Nickname,
+			&i.Favourite,
+			&i.HeldItem,
+			&i.Moves,
+			&i.Color,
+			&i.OwnerBalance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTopLevelCharactersForUser = `-- name: getTopLevelCharactersForUser :many
+SELECT 
+    c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1
+ORDER BY c.level DESC, c.xp DESC
+LIMIT $2
+`
+
+type getTopLevelCharactersForUserParams struct {
+	OwnerID string `json:"owner_id"`
+	Limit   int32  `json:"limit"`
+}
+
+type getTopLevelCharactersForUserRow struct {
+	ID               uuid.UUID `json:"id"`
+	OwnerID          string    `json:"owner_id"`
+	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
+	Idx              int32     `json:"idx"`
+	CharacterID      int32     `json:"character_id"`
+	Level            int32     `json:"level"`
+	Xp               int32     `json:"xp"`
+	Personality      string    `json:"personality"`
+	Shiny            bool      `json:"shiny"`
+	IvHp             int32     `json:"iv_hp"`
+	IvAtk            int32     `json:"iv_atk"`
+	IvDef            int32     `json:"iv_def"`
+	IvSpAtk          int32     `json:"iv_sp_atk"`
+	IvSpDef          int32     `json:"iv_sp_def"`
+	IvSpd            int32     `json:"iv_spd"`
+	IvTotal          float64   `json:"iv_total"`
+	Nickname         string    `json:"nickname"`
+	Favourite        bool      `json:"favourite"`
+	HeldItem         int32     `json:"held_item"`
+	Moves            []int32   `json:"moves"`
+	Color            int32     `json:"color"`
+	OwnerBalance     int32     `json:"owner_balance"`
+}
+
+func (q *Queries) getTopLevelCharactersForUser(ctx context.Context, arg getTopLevelCharactersForUserParams) ([]getTopLevelCharactersForUserRow, error) {
+	rows, err := q.db.Query(ctx, getTopLevelCharactersForUser, arg.OwnerID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []getTopLevelCharactersForUserRow
+	for rows.Next() {
+		var i getTopLevelCharactersForUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.ClaimedTimestamp,
+			&i.Idx,
+			&i.CharacterID,
+			&i.Level,
+			&i.Xp,
+			&i.Personality,
+			&i.Shiny,
+			&i.IvHp,
+			&i.IvAtk,
+			&i.IvDef,
+			&i.IvSpAtk,
+			&i.IvSpDef,
+			&i.IvSpd,
+			&i.IvTotal,
+			&i.Nickname,
+			&i.Favourite,
+			&i.HeldItem,
+			&i.Moves,
+			&i.Color,
+			&i.OwnerBalance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUser = `-- name: getUser :one
 SELECT id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx FROM users WHERE id = $1
 `
@@ -270,6 +665,246 @@ func (q *Queries) getUser(ctx context.Context, id string) (User, error) {
 		&i.NextIdx,
 	)
 	return i, err
+}
+
+const getUserWithSelectedCharacter = `-- name: getUserWithSelectedCharacter :one
+SELECT 
+    u.id as user_id,
+    u.balance,
+    u.selected_id,
+    u.order_by,
+    u.order_desc,
+    u.shinies_caught,
+    u.next_idx,
+    c.id as character_id,
+    c.owner_id,
+    c.claimed_timestamp,
+    c.idx,
+    c.character_id as char_character_id,
+    c.level,
+    c.xp,
+    c.personality,
+    c.shiny,
+    c.iv_hp,
+    c.iv_atk,
+    c.iv_def,
+    c.iv_sp_atk,
+    c.iv_sp_def,
+    c.iv_spd,
+    c.iv_total,
+    c.nickname,
+    c.favourite,
+    c.held_item,
+    c.moves,
+    c.color
+FROM users u
+LEFT JOIN characters c ON u.selected_id = c.id
+WHERE u.id = $1
+`
+
+type getUserWithSelectedCharacterRow struct {
+	UserID           string             `json:"user_id"`
+	Balance          int32              `json:"balance"`
+	SelectedID       uuid.UUID          `json:"selected_id"`
+	OrderBy          int32              `json:"order_by"`
+	OrderDesc        bool               `json:"order_desc"`
+	ShiniesCaught    int32              `json:"shinies_caught"`
+	NextIdx          int32              `json:"next_idx"`
+	CharacterID      uuid.UUID          `json:"character_id"`
+	OwnerID          pgtype.Text        `json:"owner_id"`
+	ClaimedTimestamp pgtype.Timestamptz `json:"claimed_timestamp"`
+	Idx              pgtype.Int4        `json:"idx"`
+	CharCharacterID  pgtype.Int4        `json:"char_character_id"`
+	Level            pgtype.Int4        `json:"level"`
+	Xp               pgtype.Int4        `json:"xp"`
+	Personality      pgtype.Text        `json:"personality"`
+	Shiny            pgtype.Bool        `json:"shiny"`
+	IvHp             pgtype.Int4        `json:"iv_hp"`
+	IvAtk            pgtype.Int4        `json:"iv_atk"`
+	IvDef            pgtype.Int4        `json:"iv_def"`
+	IvSpAtk          pgtype.Int4        `json:"iv_sp_atk"`
+	IvSpDef          pgtype.Int4        `json:"iv_sp_def"`
+	IvSpd            pgtype.Int4        `json:"iv_spd"`
+	IvTotal          pgtype.Float8      `json:"iv_total"`
+	Nickname         pgtype.Text        `json:"nickname"`
+	Favourite        pgtype.Bool        `json:"favourite"`
+	HeldItem         pgtype.Int4        `json:"held_item"`
+	Moves            []int32            `json:"moves"`
+	Color            pgtype.Int4        `json:"color"`
+}
+
+func (q *Queries) getUserWithSelectedCharacter(ctx context.Context, id string) (getUserWithSelectedCharacterRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithSelectedCharacter, id)
+	var i getUserWithSelectedCharacterRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Balance,
+		&i.SelectedID,
+		&i.OrderBy,
+		&i.OrderDesc,
+		&i.ShiniesCaught,
+		&i.NextIdx,
+		&i.CharacterID,
+		&i.OwnerID,
+		&i.ClaimedTimestamp,
+		&i.Idx,
+		&i.CharCharacterID,
+		&i.Level,
+		&i.Xp,
+		&i.Personality,
+		&i.Shiny,
+		&i.IvHp,
+		&i.IvAtk,
+		&i.IvDef,
+		&i.IvSpAtk,
+		&i.IvSpDef,
+		&i.IvSpd,
+		&i.IvTotal,
+		&i.Nickname,
+		&i.Favourite,
+		&i.HeldItem,
+		&i.Moves,
+		&i.Color,
+	)
+	return i, err
+}
+
+const getUsersWithCharacterCounts = `-- name: getUsersWithCharacterCounts :many
+SELECT 
+    u.id, u.balance, u.selected_id, u.order_by, u.order_desc, u.shinies_caught, u.next_idx,
+    COUNT(c.id) as character_count,
+    COUNT(CASE WHEN c.shiny = true THEN 1 END) as shiny_count,
+    AVG(c.level) as avg_level
+FROM users u
+LEFT JOIN characters c ON u.id = c.owner_id
+GROUP BY u.id, u.balance, u.selected_id, u.order_by, u.order_desc, u.shinies_caught, u.next_idx
+`
+
+type getUsersWithCharacterCountsRow struct {
+	ID             string    `json:"id"`
+	Balance        int32     `json:"balance"`
+	SelectedID     uuid.UUID `json:"selected_id"`
+	OrderBy        int32     `json:"order_by"`
+	OrderDesc      bool      `json:"order_desc"`
+	ShiniesCaught  int32     `json:"shinies_caught"`
+	NextIdx        int32     `json:"next_idx"`
+	CharacterCount int64     `json:"character_count"`
+	ShinyCount     int64     `json:"shiny_count"`
+	AvgLevel       float64   `json:"avg_level"`
+}
+
+func (q *Queries) getUsersWithCharacterCounts(ctx context.Context) ([]getUsersWithCharacterCountsRow, error) {
+	rows, err := q.db.Query(ctx, getUsersWithCharacterCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []getUsersWithCharacterCountsRow
+	for rows.Next() {
+		var i getUsersWithCharacterCountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Balance,
+			&i.SelectedID,
+			&i.OrderBy,
+			&i.OrderDesc,
+			&i.ShiniesCaught,
+			&i.NextIdx,
+			&i.CharacterCount,
+			&i.ShinyCount,
+			&i.AvgLevel,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchCharactersByNickname = `-- name: searchCharactersByNickname :many
+SELECT 
+    c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1 AND c.nickname ILIKE '%' || $2 || '%'
+ORDER BY c.idx
+`
+
+type searchCharactersByNicknameParams struct {
+	OwnerID string      `json:"owner_id"`
+	Column2 pgtype.Text `json:"column_2"`
+}
+
+type searchCharactersByNicknameRow struct {
+	ID               uuid.UUID `json:"id"`
+	OwnerID          string    `json:"owner_id"`
+	ClaimedTimestamp time.Time `json:"claimed_timestamp"`
+	Idx              int32     `json:"idx"`
+	CharacterID      int32     `json:"character_id"`
+	Level            int32     `json:"level"`
+	Xp               int32     `json:"xp"`
+	Personality      string    `json:"personality"`
+	Shiny            bool      `json:"shiny"`
+	IvHp             int32     `json:"iv_hp"`
+	IvAtk            int32     `json:"iv_atk"`
+	IvDef            int32     `json:"iv_def"`
+	IvSpAtk          int32     `json:"iv_sp_atk"`
+	IvSpDef          int32     `json:"iv_sp_def"`
+	IvSpd            int32     `json:"iv_spd"`
+	IvTotal          float64   `json:"iv_total"`
+	Nickname         string    `json:"nickname"`
+	Favourite        bool      `json:"favourite"`
+	HeldItem         int32     `json:"held_item"`
+	Moves            []int32   `json:"moves"`
+	Color            int32     `json:"color"`
+	OwnerBalance     int32     `json:"owner_balance"`
+}
+
+func (q *Queries) searchCharactersByNickname(ctx context.Context, arg searchCharactersByNicknameParams) ([]searchCharactersByNicknameRow, error) {
+	rows, err := q.db.Query(ctx, searchCharactersByNickname, arg.OwnerID, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []searchCharactersByNicknameRow
+	for rows.Next() {
+		var i searchCharactersByNicknameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.ClaimedTimestamp,
+			&i.Idx,
+			&i.CharacterID,
+			&i.Level,
+			&i.Xp,
+			&i.Personality,
+			&i.Shiny,
+			&i.IvHp,
+			&i.IvAtk,
+			&i.IvDef,
+			&i.IvSpAtk,
+			&i.IvSpDef,
+			&i.IvSpd,
+			&i.IvTotal,
+			&i.Nickname,
+			&i.Favourite,
+			&i.HeldItem,
+			&i.Moves,
+			&i.Color,
+			&i.OwnerBalance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateCharacter = `-- name: updateCharacter :one
@@ -375,6 +1010,33 @@ func (q *Queries) updateUser(ctx context.Context, arg updateUserParams) (User, e
 		arg.ShiniesCaught,
 		arg.NextIdx,
 	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Balance,
+		&i.SelectedID,
+		&i.OrderBy,
+		&i.OrderDesc,
+		&i.ShiniesCaught,
+		&i.NextIdx,
+	)
+	return i, err
+}
+
+const updateUserSelectedCharacter = `-- name: updateUserSelectedCharacter :one
+UPDATE users 
+SET selected_id = $2 
+WHERE id = $1 
+RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx
+`
+
+type updateUserSelectedCharacterParams struct {
+	ID         string    `json:"id"`
+	SelectedID uuid.UUID `json:"selected_id"`
+}
+
+func (q *Queries) updateUserSelectedCharacter(ctx context.Context, arg updateUserSelectedCharacterParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserSelectedCharacter, arg.ID, arg.SelectedID)
 	var i User
 	err := row.Scan(
 		&i.ID,

@@ -36,3 +36,111 @@ DELETE FROM users;
 
 -- name: deleteCharacters :exec
 DELETE FROM characters;
+
+-- name: getUserWithSelectedCharacter :one
+SELECT 
+    u.id as user_id,
+    u.balance,
+    u.selected_id,
+    u.order_by,
+    u.order_desc,
+    u.shinies_caught,
+    u.next_idx,
+    c.id as character_id,
+    c.owner_id,
+    c.claimed_timestamp,
+    c.idx,
+    c.character_id as char_character_id,
+    c.level,
+    c.xp,
+    c.personality,
+    c.shiny,
+    c.iv_hp,
+    c.iv_atk,
+    c.iv_def,
+    c.iv_sp_atk,
+    c.iv_sp_def,
+    c.iv_spd,
+    c.iv_total,
+    c.nickname,
+    c.favourite,
+    c.held_item,
+    c.moves,
+    c.color
+FROM users u
+LEFT JOIN characters c ON u.selected_id = c.id
+WHERE u.id = $1;
+
+-- name: getCharactersWithOwnerInfo :many
+SELECT 
+    c.*,
+    u.balance as owner_balance,
+    u.shinies_caught as owner_shinies_caught
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1
+ORDER BY c.idx;
+
+-- name: getCharacterWithOwnerInfo :one
+SELECT 
+    c.*,
+    u.balance as owner_balance,
+    u.shinies_caught as owner_shinies_caught,
+    u.order_by as owner_order_by,
+    u.order_desc as owner_order_desc
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.id = $1;
+
+-- name: getUsersWithCharacterCounts :many
+SELECT 
+    u.*,
+    COUNT(c.id) as character_count,
+    COUNT(CASE WHEN c.shiny = true THEN 1 END) as shiny_count,
+    AVG(c.level) as avg_level
+FROM users u
+LEFT JOIN characters c ON u.id = c.owner_id
+GROUP BY u.id, u.balance, u.selected_id, u.order_by, u.order_desc, u.shinies_caught, u.next_idx;
+
+-- name: getFavouriteCharactersForUser :many
+SELECT 
+    c.*,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1 AND c.favourite = true
+ORDER BY c.idx;
+
+-- name: getShinyCharactersForUser :many
+SELECT 
+    c.*,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1 AND c.shiny = true
+ORDER BY c.idx;
+
+-- name: getTopLevelCharactersForUser :many
+SELECT 
+    c.*,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1
+ORDER BY c.level DESC, c.xp DESC
+LIMIT $2;
+
+-- name: searchCharactersByNickname :many
+SELECT 
+    c.*,
+    u.balance as owner_balance
+FROM characters c
+INNER JOIN users u ON c.owner_id = u.id
+WHERE c.owner_id = $1 AND c.nickname ILIKE '%' || $2 || '%'
+ORDER BY c.idx;
+
+-- name: updateUserSelectedCharacter :one
+UPDATE users 
+SET selected_id = $2 
+WHERE id = $1 
+RETURNING *;
