@@ -1,5 +1,4 @@
 version: '3.9'
-
 services:
   # The main application service for the Discord bot
   bot:
@@ -21,7 +20,7 @@ services:
       - BOT_TOKEN=${BOT_TOKEN:?err_bot_token_not_set}
       # Database connection settings
       - DB_HOST=postgres
-      - DB_PORT=5433
+      - DB_PORT=5432  # Changed from 5433 to 5432 (PostgreSQL default port inside container)
       - DB_USER=${POSTGRES_USER:-friemon}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-friemonpass}
       - DB_NAME=${POSTGRES_DB:-friemon}
@@ -32,7 +31,6 @@ services:
       - REDIS_DB=${REDIS_DB:-0}
     networks:
       - friemon_net
-
   # PostgreSQL service for persistent data storage
   postgres:
     image: postgres:16.3-alpine
@@ -44,18 +42,17 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
     # Port is exposed to the host so pgAdmin and the migrate CLI can connect.
     ports:
-      - "127.0.0.1:5433:5433"
+      - "127.0.0.1:5433:5432"  # Map host port 5433 to container port 5432
     volumes:
       # Use a named volume for better data management
       - postgres_data:/var/lib/postgresql/data
     networks:
       - friemon_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-friemon} -d ${POSTGRES_DB:-friemon}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-friemon} -d ${POSTGRES_DB:-friemon} -p 5432"]
       interval: 10s
       timeout: 5s
       retries: 5
-
   # Redis service for caching and transient data storage
   redis:
     image: redis:7.2-alpine
@@ -72,7 +69,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
   # NEW: pgAdmin service for managing the PostgreSQL database
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -81,7 +77,7 @@ services:
     environment:
       # Set your desired login credentials for the pgAdmin web interface
       PGADMIN_DEFAULT_EMAIL: "admin@example.com"
-      PGADMIN_DEFAULT_PASSWORD: "admin"
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
     ports:
       # Expose pgAdmin on host port 5050
       - "5050:80"
@@ -92,7 +88,6 @@ services:
       - friemon_net
     depends_on:
       - postgres
-
   # NEW: Redis Commander service for managing the Redis database
   redis-commander:
     image: rediscommander/redis-commander:latest
@@ -109,13 +104,11 @@ services:
       - friemon_net
     depends_on:
       - redis
-
 # Use named volumes for all persistent data
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
-
 networks:
   friemon_net:
     driver: bridge
