@@ -16,7 +16,11 @@ const (
 
 func spawnCharacter(b *friemon.Bot, e *events.MessageCreate) {
 	slog.Info("Interaction count", slog.Int("count", b.Cache.GetInteractionCount(e.ChannelID)))
-	b.Cache.IncrementInteractionCount(e.ChannelID)
+	err := b.Cache.IncrementInteractionCount(e.ChannelID)
+	if err != nil {
+		slog.Error("Failed to increment interaction count", slog.Any("err", err))
+		return
+	}
 
 	if b.Cache.GetInteractionCount(e.ChannelID) <= spawnThreshold {
 		return
@@ -32,7 +36,11 @@ func spawnCharacter(b *friemon.Bot, e *events.MessageCreate) {
 	spawnImage, err := randomCharacter.Image()
 	if err != nil {
 		slog.Error("Failed to get character image", slog.Any("err", err))
-		b.Cache.ResetInteractionCount(e.ChannelID)
+		err := b.Cache.ResetInteractionCount(e.ChannelID)
+		if err != nil {
+			slog.Error("Failed to reset interaction count", slog.Any("err", err))
+			return
+		}
 		return
 	} else {
 		spawnEmbed.SetImage("attachment://character.png")
@@ -56,6 +64,15 @@ func spawnCharacter(b *friemon.Bot, e *events.MessageCreate) {
 		return
 	}
 
-	b.Cache.SetChannelCharacter(e.ChannelID, randomCharacter)
-	b.Cache.ResetInteractionCount(e.ChannelID)
+	err = b.Cache.SetChannelCharacter(e.ChannelID, randomCharacter)
+	if err != nil {
+		slog.Error("Failed to set channel character", slog.Any("err", err))
+		return
+	}
+
+	err = b.Cache.ResetInteractionCount(e.ChannelID)
+	if err != nil {
+		slog.Error("Failed to reset interaction count", slog.Any("err", err))
+		return
+	}
 }

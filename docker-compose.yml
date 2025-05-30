@@ -21,7 +21,7 @@ services:
       - BOT_TOKEN=${BOT_TOKEN:?err_bot_token_not_set}
       # Database connection settings
       - DB_HOST=postgres
-      - DB_PORT=5432
+      - DB_PORT=5433
       - DB_USER=${POSTGRES_USER:-friemon}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-friemonpass}
       - DB_NAME=${POSTGRES_DB:-friemon}

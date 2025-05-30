@@ -112,7 +112,6 @@ jobs:
                       export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
                       export POSTGRES_DB="friemon" # Or from secrets
                       export REDIS_PASSWORD="" # Or from secrets
-                      # Add any other environment variables your docker-compose.yml expects
 
                       echo "Pulling latest Docker image..."
                       docker pull ${{ env.DOCKER_IMAGE_NAME }}:latest
@@ -121,9 +120,6 @@ jobs:
                       docker-compose down
 
                       echo "Starting new containers..."
-                      # Pass environment variables needed by docker-compose
-                      # Note: docker-compose will also pick up .env file if present in the project directory
-                      # Ensure your docker-compose.yml is configured to use these env vars
                       BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
                       POSTGRES_USER="friemon" \
                       POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}" \
@@ -132,14 +128,9 @@ jobs:
                       docker-compose up -d --remove-orphans
 
                       echo "Waiting for PostgreSQL to be ready..."
-                      # This is a simple wait; a more robust check might involve trying to connect
                       sleep 15
 
                       echo "Running database migrations..."
-                      # The migrate command needs to connect to the PostgreSQL instance.
-                      # Ensure the DB_USER and DB_PASSWORD here match what postgres service uses.
-                      # The hostname 'localhost' is used because the migrate CLI is run on the VPS itself,
-                      # connecting to the PostgreSQL port exposed on the VPS's localhost (127.0.0.1:5433).
                       migrate -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" -path ./friemon/db/migrations up
 
                       echo "Deployment successful!"
