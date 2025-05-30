@@ -44,7 +44,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-friemon}
     # Port is exposed to the host so pgAdmin and the migrate CLI can connect.
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:5433:5433"
     volumes:
       # Use a named volume for better data management
       - postgres_data:/var/lib/postgresql/data
