@@ -13,10 +13,10 @@ import (
 	disgobot "github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/theoreotm/friemon/internal/bot"
-	"github.com/theoreotm/friemon/internal/commands"
-	"github.com/theoreotm/friemon/internal/components"
-	"github.com/theoreotm/friemon/internal/handlers"
+	"github.com/theoreotm/friemon/internal/application/bot"
+	"github.com/theoreotm/friemon/internal/application/commands"
+	"github.com/theoreotm/friemon/internal/application/components"
+	"github.com/theoreotm/friemon/internal/application/handlers"
 )
 
 var (

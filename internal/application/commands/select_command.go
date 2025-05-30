@@ -6,8 +6,8 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/google/uuid"
-	"github.com/theoreotm/friemon/entities"
-	"github.com/theoreotm/friemon/internal/bot"
+	"github.com/theoreotm/friemon/internal/application/bot"
+	"github.com/theoreotm/friemon/internal/core/entities"
 )
 
 func init() {

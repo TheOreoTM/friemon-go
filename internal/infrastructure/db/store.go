@@ -5,7 +5,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
-	"github.com/theoreotm/friemon/entities"
+	"github.com/theoreotm/friemon/internal/core/entities"
 )
 
 // Store is the database

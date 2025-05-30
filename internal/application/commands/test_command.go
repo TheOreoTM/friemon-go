@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/theoreotm/friemon/internal/bot"
+	"github.com/theoreotm/friemon/internal/application/bot"
 )
 
 func init() {

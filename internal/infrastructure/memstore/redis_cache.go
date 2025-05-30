@@ -11,7 +11,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/redis/go-redis/v9"
-	"github.com/theoreotm/friemon/entities"
+	"github.com/theoreotm/friemon/internal/core/entities"
 )
 
 // RedisCache implements the Cache interface using Redis.

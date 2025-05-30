@@ -7,7 +7,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/theoreotm/friemon/constants"
-	"github.com/theoreotm/friemon/internal/bot"
+	"github.com/theoreotm/friemon/internal/application/bot"
 )
 
 func incrementXp(b *bot.Bot, e *events.MessageCreate) {

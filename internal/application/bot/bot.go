@@ -16,9 +16,9 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
-	"github.com/theoreotm/friemon/internal/db"
-	"github.com/theoreotm/friemon/internal/memstore"
-	"github.com/theoreotm/friemon/pkg/scheduler"
+	"github.com/theoreotm/friemon/internal/infrastructure/db"
+	"github.com/theoreotm/friemon/internal/infrastructure/memstore"
+	"github.com/theoreotm/friemon/internal/infrastructure/scheduler"
 )
 
 type Bot struct {

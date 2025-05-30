@@ -3,7 +3,7 @@ package handlers
 import (
 	disgobot "github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/events"
-	"github.com/theoreotm/friemon/internal/bot"
+	"github.com/theoreotm/friemon/internal/application/bot"
 )
 
 func OnMessage(b *bot.Bot) disgobot.EventListener {

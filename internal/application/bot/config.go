@@ -9,7 +9,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/theoreotm/friemon/internal/db"
+	"github.com/theoreotm/friemon/internal/infrastructure/db"
 )
 
 func LoadConfig(path string) (*Config, error) {

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/theoreotm/friemon/entities"
+	"github.com/theoreotm/friemon/internal/core/entities"
 )
 
 type memoryCache struct {
