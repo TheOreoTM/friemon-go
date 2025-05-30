@@ -7,10 +7,10 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/theoreotm/friemon/constants"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
-func incrementXp(b *friemon.Bot, e *events.MessageCreate) {
+func incrementXp(b *bot.Bot, e *events.MessageCreate) {
 	leveledUp := false
 	selectedCharacter, err := b.DB.GetSelectedCharacter(b.Context, e.Message.Author.ID)
 	if err != nil {

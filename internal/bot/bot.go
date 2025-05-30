@@ -1,4 +1,4 @@
-package friemon
+package bot
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/disgo"
-	"github.com/disgoorg/disgo/bot"
+	disgobot "github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/cache"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
@@ -16,9 +16,23 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
-	"github.com/theoreotm/friemon/friemon/db"
-	"github.com/theoreotm/friemon/friemon/memstore"
+	"github.com/theoreotm/friemon/internal/db"
+	"github.com/theoreotm/friemon/internal/memstore"
+	"github.com/theoreotm/friemon/pkg/scheduler"
 )
+
+type Bot struct {
+	Cfg       Config
+	Client    disgobot.Client
+	Paginator *paginator.Manager
+	DB        *db.Queries
+	Cache     memstore.Cache
+	BuildInfo BuildInfo
+	Context   context.Context
+	conn      *pgx.Conn
+	Redis     *redis.Client
+	Scheduler *scheduler.Scheduler
+}
 
 func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	db, conn, err := db.NewDB(cfg.Database)
@@ -45,6 +59,17 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 
 	slog.Info("Connected to Redis", slog.String("addr", cfg.Redis.Addr))
 
+	schedulerBackend, err := scheduler.NewRedisBackendWithClient(
+		redisClient,
+		"scheduler", // key prefix
+	)
+	if err != nil {
+		slog.Error("Failed to create scheduler backend", slog.Any("err", err))
+		os.Exit(-1)
+	}
+
+	sched := scheduler.New(schedulerBackend)
+
 	b := &Bot{
 		Cfg:       cfg,
 		Paginator: paginator.New(),
@@ -52,6 +77,7 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 		Context:   ctx,
 		conn:      conn,
 		Redis:     redisClient,
+		Scheduler: sched,
 	}
 
 	b.DB = db
@@ -64,30 +90,18 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	return b
 }
 
-type Bot struct {
-	Cfg       Config
-	Client    bot.Client
-	Paginator *paginator.Manager
-	DB        *db.Queries
-	Cache     memstore.Cache
-	BuildInfo BuildInfo
-	Context   context.Context
-	conn      *pgx.Conn
-	Redis     *redis.Client
-}
-
 type BuildInfo struct {
 	Version string
 	Commit  string
 	Branch  string
 }
 
-func (b *Bot) SetupBot(listeners ...bot.EventListener) error {
+func (b *Bot) SetupBot(listeners ...disgobot.EventListener) error {
 	client, err := disgo.New(b.Cfg.Bot.Token,
-		bot.WithGatewayConfigOpts(gateway.WithIntents(gateway.IntentGuilds, gateway.IntentGuildMessages, gateway.IntentMessageContent)),
-		bot.WithCacheConfigOpts(cache.WithCaches(cache.FlagGuilds)),
-		bot.WithEventListeners(b.Paginator),
-		bot.WithEventListeners(listeners...),
+		disgobot.WithGatewayConfigOpts(gateway.WithIntents(gateway.IntentGuilds, gateway.IntentGuildMessages, gateway.IntentMessageContent)),
+		disgobot.WithCacheConfigOpts(cache.WithCaches(cache.FlagGuilds)),
+		disgobot.WithEventListeners(b.Paginator),
+		disgobot.WithEventListeners(listeners...),
 	)
 	if err != nil {
 		return err

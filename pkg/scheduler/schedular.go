@@ -1,136 +1,240 @@
 package scheduler
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"sync"
 	"time"
 )
 
-// TaskType represents different types of scheduled tasks
-type TaskType string
+// TaskData represents flexible task data
+type TaskData map[string]interface{}
 
-const (
-	TaskTypeDisableSpawnButton TaskType = "disable_spawn_button"
-	TaskTypeCleanupChannel     TaskType = "cleanup_channel"
-	TaskTypeRemindUser         TaskType = "remind_user"
-	TaskTypeResetCooldown      TaskType = "reset_cooldown"
-	TaskTypeExpireItem         TaskType = "expire_item"
-)
-
-// Task represents a scheduled task with custom data
+// Task represents a scheduled task
 type Task struct {
-	ID        string                 `json:"id"`
-	Type      TaskType               `json:"type"`
-	Data      map[string]interface{} `json:"data"`
-	CreatedAt time.Time              `json:"created_at"`
-	ExpiresAt time.Time              `json:"expires_at"`
+	ID        string    `json:"id"`
+	Type      string    `json:"type"`
+	Data      TaskData  `json:"data"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// TaskHandler is a function that processes expired tasks
-type TaskHandler func(task Task) error
+// TaskHandler is a function that processes tasks
+type TaskHandler func(ctx context.Context, data TaskData) error
 
-// Backend defines the interface for task storage backends
+// TaskOptions for configuring scheduled tasks
+type TaskOptions struct {
+	ID    string
+	Data  TaskData
+	Delay time.Duration
+}
+
+// Backend interface remains the same but simplified
 type Backend interface {
-	// Store a task with expiration
-	StoreTask(task Task, delay time.Duration) error
-	
-	// Cancel a scheduled task
-	CancelTask(taskID string) error
-	
-	// Start listening for expired tasks
+	Store(task Task, delay time.Duration) error
+	Cancel(taskID string) error
 	StartListening(onExpire func(task Task)) error
-	
-	// Stop the backend and cleanup resources
 	Stop() error
-	
-	// Health check
 	Ping() error
 }
 
-// Scheduler manages scheduled tasks
+// Scheduler provides a flexible task scheduling system
 type Scheduler struct {
-	backend  Backend
-	handlers map[TaskType]TaskHandler
+	backend   Backend
+	handlers  map[string]TaskHandler
+	mu        sync.RWMutex
+	ctx       context.Context
+	cancel    context.CancelFunc
+	idCounter int64
+	idMu      sync.Mutex
 }
 
-// New creates a new scheduler with the given backend
+// New creates a new scheduler
 func New(backend Backend) *Scheduler {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Scheduler{
 		backend:  backend,
-		handlers: make(map[TaskType]TaskHandler),
+		handlers: make(map[string]TaskHandler),
+		ctx:      ctx,
+		cancel:   cancel,
 	}
 }
 
-// Start initializes the scheduler and begins listening for expired tasks
+// Start initializes the scheduler
 func (s *Scheduler) Start() error {
 	return s.backend.StartListening(s.executeTask)
 }
 
 // Stop shuts down the scheduler
 func (s *Scheduler) Stop() error {
+	s.cancel()
 	return s.backend.Stop()
 }
 
-// RegisterHandler registers a handler for a specific task type
-func (s *Scheduler) RegisterHandler(taskType TaskType, handler TaskHandler) {
+// On registers a handler for a task type (like addEventListener)
+func (s *Scheduler) On(taskType string, handler TaskHandler) *Scheduler {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.handlers[taskType] = handler
+	return s
 }
 
-// Schedule schedules a task to be executed after the specified delay
-func (s *Scheduler) Schedule(taskType TaskType, data map[string]interface{}, delay time.Duration) (string, error) {
-	taskID := generateTaskID(taskType)
-	
+// Off removes a handler for a task type
+func (s *Scheduler) Off(taskType string) *Scheduler {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.handlers, taskType)
+	return s
+}
+
+// After schedules a task to run after a delay
+func (s *Scheduler) After(delay time.Duration) *TaskBuilder {
+	return &TaskBuilder{
+		scheduler: s,
+		delay:     delay,
+		data:      make(TaskData),
+	}
+}
+
+// In is an alias for After (more natural for some use cases)
+func (s *Scheduler) In(delay time.Duration) *TaskBuilder {
+	return s.After(delay)
+}
+
+// At schedules a task to run at a specific time
+func (s *Scheduler) At(when time.Time) *TaskBuilder {
+	delay := time.Until(when)
+	if delay < 0 {
+		delay = 0
+	}
+	return s.After(delay)
+}
+
+// Cancel cancels a scheduled task
+func (s *Scheduler) Cancel(taskID string) error {
+	return s.backend.Cancel(taskID)
+}
+
+// Health checks scheduler health
+func (s *Scheduler) Health() error {
+	return s.backend.Ping()
+}
+
+// TaskBuilder provides a fluent interface for building tasks
+type TaskBuilder struct {
+	scheduler *Scheduler
+	delay     time.Duration
+	data      TaskData
+	taskType  string
+	id        string
+}
+
+// Type sets the task type
+func (tb *TaskBuilder) Type(taskType string) *TaskBuilder {
+	tb.taskType = taskType
+	return tb
+}
+
+// ID sets a custom task ID
+func (tb *TaskBuilder) ID(id string) *TaskBuilder {
+	tb.id = id
+	return tb
+}
+
+// With adds data to the task
+func (tb *TaskBuilder) With(key string, value interface{}) *TaskBuilder {
+	tb.data[key] = value
+	return tb
+}
+
+// WithData sets multiple data fields at once
+func (tb *TaskBuilder) WithData(data TaskData) *TaskBuilder {
+	for k, v := range data {
+		tb.data[k] = v
+	}
+	return tb
+}
+
+// Do executes a task with a specific handler (JS-like callback)
+func (tb *TaskBuilder) Do(handler TaskHandler) (string, error) {
+	taskType := tb.taskType
+	if taskType == "" {
+		taskType = fmt.Sprintf("anonymous_%d", tb.scheduler.generateID())
+	}
+
+	// Register the handler for this specific task type
+	tb.scheduler.On(taskType, handler)
+
+	return tb.scheduler.scheduleTask(taskType, tb.data, tb.delay, tb.id)
+}
+
+// Emit schedules a task of the specified type (assumes handler is already registered)
+func (tb *TaskBuilder) Emit(taskType string) (string, error) {
+	return tb.scheduler.scheduleTask(taskType, tb.data, tb.delay, tb.id)
+}
+
+// Execute is like Do but for when you want to schedule with pre-registered handlers
+func (tb *TaskBuilder) Execute(taskType string) (string, error) {
+	return tb.Emit(taskType)
+}
+
+// scheduleTask internal method to schedule a task
+func (s *Scheduler) scheduleTask(taskType string, data TaskData, delay time.Duration, customID string) (string, error) {
+	id := customID
+	if id == "" {
+		id = fmt.Sprintf("%s_%d_%d", taskType, time.Now().UnixNano(), s.generateID())
+	}
+
 	task := Task{
-		ID:        taskID,
+		ID:        id,
 		Type:      taskType,
 		Data:      data,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(delay),
 	}
 
-	err := s.backend.StoreTask(task, delay)
+	err := s.backend.Store(task, delay)
 	if err != nil {
 		return "", err
 	}
 
-	return taskID, nil
+	return id, nil
 }
 
-// Cancel cancels a scheduled task
-func (s *Scheduler) Cancel(taskID string) error {
-	return s.backend.CancelTask(taskID)
-}
-
-// Health returns the health status of the scheduler
-func (s *Scheduler) Health() error {
-	return s.backend.Ping()
+// generateID generates a unique ID
+func (s *Scheduler) generateID() int64 {
+	s.idMu.Lock()
+	defer s.idMu.Unlock()
+	s.idCounter++
+	return s.idCounter
 }
 
 // executeTask executes a task by calling the appropriate handler
 func (s *Scheduler) executeTask(task Task) {
+	s.mu.RLock()
 	handler, exists := s.handlers[task.Type]
+	s.mu.RUnlock()
+
 	if !exists {
-		// Log error - no handler registered
-		return
+		return // No handler registered
 	}
 
-	if err := handler(task); err != nil {
-		// Log error - task execution failed
-	}
+	// Execute handler with context and error handling
+	go func() {
+		ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+		defer cancel()
+
+		if err := handler(ctx, task.Data); err != nil {
+			// Log error - task execution failed
+			fmt.Printf("Task execution failed: %v\n", err)
+		}
+	}()
 }
 
-// generateTaskID generates a unique task ID
-func generateTaskID(taskType TaskType) string {
-	return string(taskType) + ":" + generateUniqueID()
-}
-
-// generateUniqueID generates a unique identifier
-func generateUniqueID() string {
-	return time.Now().Format("20060102150405.000000000")
-}
-
-// Utility functions for common data operations
-func (t *Task) GetString(key string) (string, bool) {
-	val, exists := t.Data[key]
+// Utility methods for TaskData
+func (td TaskData) String(key string) (string, bool) {
+	val, exists := td[key]
 	if !exists {
 		return "", false
 	}
@@ -138,25 +242,26 @@ func (t *Task) GetString(key string) (string, bool) {
 	return str, ok
 }
 
-func (t *Task) GetInt(key string) (int, bool) {
-	val, exists := t.Data[key]
+func (td TaskData) Int(key string) (int, bool) {
+	val, exists := td[key]
 	if !exists {
 		return 0, false
 	}
-	
-	// Handle both int and float64 (JSON unmarshaling)
+
 	switch v := val.(type) {
 	case int:
 		return v, true
 	case float64:
+		return int(v), true
+	case int64:
 		return int(v), true
 	default:
 		return 0, false
 	}
 }
 
-func (t *Task) GetBool(key string) (bool, bool) {
-	val, exists := t.Data[key]
+func (td TaskData) Bool(key string) (bool, bool) {
+	val, exists := td[key]
 	if !exists {
 		return false, false
 	}
@@ -164,18 +269,33 @@ func (t *Task) GetBool(key string) (bool, bool) {
 	return b, ok
 }
 
-func (t *Task) MustGetString(key string) string {
-	val, _ := t.GetString(key)
+func (td TaskData) Get(key string) (interface{}, bool) {
+	val, exists := td[key]
+	return val, exists
+}
+
+// Must variants (panic on missing/wrong type)
+func (td TaskData) MustString(key string) string {
+	val, ok := td.String(key)
+	if !ok {
+		panic(fmt.Sprintf("key %s not found or not string", key))
+	}
 	return val
 }
 
-func (t *Task) MustGetInt(key string) int {
-	val, _ := t.GetInt(key)
+func (td TaskData) MustInt(key string) int {
+	val, ok := td.Int(key)
+	if !ok {
+		panic(fmt.Sprintf("key %s not found or not int", key))
+	}
 	return val
 }
 
-func (t *Task) MustGetBool(key string) bool {
-	val, _ := t.GetBool(key)
+func (td TaskData) MustBool(key string) bool {
+	val, ok := td.Bool(key)
+	if !ok {
+		panic(fmt.Sprintf("key %s not found or not bool", key))
+	}
 	return val
 }
 
@@ -191,4 +311,23 @@ func TaskFromJSON(data []byte) (*Task, error) {
 		return nil, err
 	}
 	return &task, nil
+}
+
+// Convenience functions for common patterns
+
+// Every creates a recurring task (you'd need to re-schedule in the handler)
+func (s *Scheduler) Every(interval time.Duration) *TaskBuilder {
+	return s.After(interval)
+}
+
+// Once schedules a one-time task with inline handler
+func (s *Scheduler) Once(delay time.Duration, handler TaskHandler) (string, error) {
+	return s.After(delay).Do(handler)
+}
+
+// Debounce creates a debounced task (cancels previous if exists)
+func (s *Scheduler) Debounce(taskID string, delay time.Duration) *TaskBuilder {
+	// Cancel existing task if it exists
+	s.Cancel(taskID)
+	return s.After(delay).ID(taskID)
 }

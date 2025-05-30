@@ -7,14 +7,14 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/entities"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 const (
 	spawnThreshold = 4 // Change accordingly
 )
 
-func spawnCharacter(b *friemon.Bot, e *events.MessageCreate) {
+func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 	slog.Info("Interaction count", slog.Int("count", b.Cache.GetInteractionCount(e.ChannelID)))
 	err := b.Cache.IncrementInteractionCount(e.ChannelID)
 	if err != nil {

@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 )
@@ -29,8 +28,8 @@ func NewMemoryBackend() *MemoryBackend {
 	}
 }
 
-// StoreTask stores a task in memory
-func (m *MemoryBackend) StoreTask(task Task, delay time.Duration) error {
+// Store stores a task in memory
+func (m *MemoryBackend) Store(task Task, delay time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -39,16 +38,13 @@ func (m *MemoryBackend) StoreTask(task Task, delay time.Duration) error {
 		expiresAt: time.Now().Add(delay),
 	}
 
-	slog.Info("Task scheduled in memory",
-		slog.String("task_id", task.ID),
-		slog.String("type", string(task.Type)),
-		slog.Duration("delay", delay))
-
+	fmt.Printf("Task scheduled: %s (type: %s) in %v\n",
+		task.ID, task.Type, delay)
 	return nil
 }
 
-// CancelTask cancels a scheduled task
-func (m *MemoryBackend) CancelTask(taskID string) error {
+// Cancel cancels a scheduled task
+func (m *MemoryBackend) Cancel(taskID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -57,16 +53,14 @@ func (m *MemoryBackend) CancelTask(taskID string) error {
 	}
 
 	delete(m.tasks, taskID)
-	slog.Info("Task cancelled", slog.String("task_id", taskID))
+	fmt.Printf("Task cancelled: %s\n", taskID)
 	return nil
 }
 
 // StartListening starts the background cleanup process
 func (m *MemoryBackend) StartListening(onExpire func(task Task)) error {
 	m.onExpire = onExpire
-
-	// Start cleanup ticker (check every 30 seconds)
-	m.ticker = time.NewTicker(30 * time.Second)
+	m.ticker = time.NewTicker(time.Second) // Check every second for demo
 
 	go func() {
 		defer m.ticker.Stop()
@@ -76,29 +70,24 @@ func (m *MemoryBackend) StartListening(onExpire func(task Task)) error {
 			case <-m.ticker.C:
 				m.processExpiredTasks()
 			case <-m.done:
-				slog.Info("Memory backend listener stopping")
 				return
 			}
 		}
 	}()
 
-	slog.Info("Memory backend started")
 	return nil
 }
 
 // Stop stops the memory backend
 func (m *MemoryBackend) Stop() error {
 	close(m.done)
-
 	if m.ticker != nil {
 		m.ticker.Stop()
 	}
-
-	slog.Info("Memory backend stopped")
 	return nil
 }
 
-// Ping always returns nil for memory backend (always healthy)
+// Ping always returns nil for memory backend
 func (m *MemoryBackend) Ping() error {
 	return nil
 }
@@ -118,37 +107,15 @@ func (m *MemoryBackend) processExpiredTasks() {
 		}
 	}
 
-	// Remove expired tasks
 	for _, id := range expiredIDs {
 		delete(m.tasks, id)
 	}
 
 	m.mu.Unlock()
 
-	// Execute expired tasks (outside of mutex)
 	for _, task := range expiredTasks {
 		if m.onExpire != nil {
 			m.onExpire(task)
 		}
-	}
-
-	if len(expiredTasks) > 0 {
-		slog.Info("Processed expired tasks", slog.Int("count", len(expiredTasks)))
-	}
-}
-
-// GetStats returns memory backend statistics
-func (m *MemoryBackend) GetStats() map[string]interface{} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	tasksByType := make(map[string]int)
-	for _, scheduled := range m.tasks {
-		tasksByType[string(scheduled.task.Type)]++
-	}
-
-	return map[string]interface{}{
-		"total_tasks":   len(m.tasks),
-		"tasks_by_type": tasksByType,
 	}
 }

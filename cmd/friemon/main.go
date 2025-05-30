@@ -1,4 +1,4 @@
-package main
+package friemon
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/disgoorg/disgo/bot"
+	disgobot "github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/theoreotm/friemon/friemon"
-	"github.com/theoreotm/friemon/friemon/commands"
-	"github.com/theoreotm/friemon/friemon/components"
-	"github.com/theoreotm/friemon/friemon/handlers"
+	"github.com/theoreotm/friemon/internal/bot"
+	"github.com/theoreotm/friemon/internal/commands"
+	"github.com/theoreotm/friemon/internal/components"
+	"github.com/theoreotm/friemon/internal/handlers"
 )
 
 var (
@@ -48,7 +48,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	cfg, err := friemon.LoadConfig(*path)
+	cfg, err := bot.LoadConfig(*path)
 	if err != nil {
 		slog.Error("Failed to read config", slog.Any("err", err))
 		os.Exit(-1)
@@ -71,12 +71,12 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	buildInfo := friemon.BuildInfo{
+	buildInfo := bot.BuildInfo{
 		Version: cfg.Bot.Version,
 		Commit:  commit,
 		Branch:  branch,
 	}
-	b := friemon.New(*cfg, buildInfo, ctx)
+	b := bot.New(*cfg, buildInfo, ctx)
 	h := handler.New()
 
 	for _, cmd := range commands.Commands {
@@ -92,7 +92,7 @@ func main() {
 		h.Component(key, comp(b))
 	}
 
-	if err = b.SetupBot(h, bot.NewListenerFunc(b.OnReady), handlers.OnMessage(b)); err != nil {
+	if err = b.SetupBot(h, disgobot.NewListenerFunc(b.OnReady), handlers.OnMessage(b)); err != nil {
 		slog.Error("Failed to setup bot", slog.Any("err", err))
 		os.Exit(-1)
 	}
@@ -138,7 +138,7 @@ func main() {
 	slog.Info("Shutting down bot...")
 }
 
-func setupLogger(cfg friemon.LogConfig) {
+func setupLogger(cfg bot.LogConfig) {
 	level := cfg.Level
 	if dev {
 		level = slog.LevelDebug

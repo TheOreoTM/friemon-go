@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/entities"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 func init() {
@@ -34,7 +34,7 @@ var cmdInfo = &Command{
 	Category:     "Friemon",
 }
 
-func handleInfo(b *friemon.Bot) handler.CommandHandler {
+func handleInfo(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		id := e.SlashCommandInteractionData().String("character")
 		var ch *entities.Character
@@ -111,7 +111,7 @@ func handleInfo(b *friemon.Bot) handler.CommandHandler {
 	}
 }
 
-func handleGetCharacterAutocomplete(b *friemon.Bot) handler.AutocompleteHandler {
+func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
 	return func(e *handler.AutocompleteEvent) error {
 		query := e.Data.String("character")
 		var results []discord.AutocompleteChoiceString

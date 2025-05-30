@@ -88,7 +88,7 @@ You should see a "friemon ready" message, and the bot will appear as online in y
 
 ---
 
-## 📂 Project Structure
+## 📂 Project Structure (outdated)
 
 A brief overview of the key directories in the project:
 ```

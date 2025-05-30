@@ -6,7 +6,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/entities"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 func init() {
@@ -22,7 +22,7 @@ var cmdCharacter = &Command{
 	Category: "Friemon",
 }
 
-func handleCharacter(b *friemon.Bot) handler.CommandHandler {
+func handleCharacter(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		randomChar := entities.NewCharacter(e.Member().User.ID.String())
 		err := b.DB.CreateCharacter(e.Ctx, e.Member().User.ID, randomChar)

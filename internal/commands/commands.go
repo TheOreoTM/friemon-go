@@ -4,15 +4,15 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/constants"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 var Commands = map[string]*Command{}
 
 type Command struct {
 	Cmd          discord.ApplicationCommandCreate
-	Handler      func(b *friemon.Bot) handler.CommandHandler
-	Autocomplete func(b *friemon.Bot) handler.AutocompleteHandler
+	Handler      func(b *bot.Bot) handler.CommandHandler
+	Autocomplete func(b *bot.Bot) handler.AutocompleteHandler
 	Category     string
 }
 

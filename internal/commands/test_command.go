@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 func init() {
@@ -28,7 +28,7 @@ var test = &Command{
 	Category:     "Friemon",
 }
 
-func handleTest(b *friemon.Bot) handler.CommandHandler {
+func handleTest(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		return e.CreateMessage(discord.NewMessageCreateBuilder().
 			SetContentf("test command. Choice: %s", e.SlashCommandInteractionData().String("choice")).
@@ -38,7 +38,7 @@ func handleTest(b *friemon.Bot) handler.CommandHandler {
 	}
 }
 
-func handleTestAutocomplete(b *friemon.Bot) handler.AutocompleteHandler {
+func handleTestAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
 	return func(e *handler.AutocompleteEvent) error {
 		return e.AutocompleteResult([]discord.AutocompleteChoice{
 			discord.AutocompleteChoiceString{

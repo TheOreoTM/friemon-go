@@ -10,7 +10,7 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/entities"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 func init() {
@@ -37,7 +37,7 @@ var cmdList = &Command{
 	Category: "Friemon",
 }
 
-func handlelist(b *friemon.Bot) handler.CommandHandler {
+func handlelist(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		characters, err := b.DB.GetCharactersForUser(e.Ctx, e.Member().User.ID)
 		if err != nil {

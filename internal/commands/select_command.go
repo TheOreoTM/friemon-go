@@ -7,7 +7,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/entities"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 func init() {
@@ -32,7 +32,7 @@ var cmdSelect = &Command{
 	Category:     "Friemon",
 }
 
-func handleSelect(b *friemon.Bot) handler.CommandHandler {
+func handleSelect(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		id := e.SlashCommandInteractionData().String("character")
 		if id == "" || id == "-1" {

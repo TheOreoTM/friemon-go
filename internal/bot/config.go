@@ -1,4 +1,4 @@
-package friemon
+package bot
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/theoreotm/friemon/friemon/db"
+	"github.com/theoreotm/friemon/internal/db"
 )
 
 func LoadConfig(path string) (*Config, error) {

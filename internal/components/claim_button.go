@@ -6,7 +6,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/theoreotm/friemon/friemon"
+	"github.com/theoreotm/friemon/internal/bot"
 )
 
 var claimMutex sync.Mutex
@@ -15,7 +15,7 @@ func init() {
 	Components["/claim"] = claimCharacterButton
 }
 
-func claimCharacterButton(b *friemon.Bot) handler.ComponentHandler {
+func claimCharacterButton(b *bot.Bot) handler.ComponentHandler {
 	return func(e *handler.ComponentEvent) error {
 		claimMutex.Lock()
 		defer claimMutex.Unlock()

@@ -27,7 +27,7 @@ COPY . .
 # Build arguments can be passed to embed version info into the binary.
 ARG COMMIT=unknown
 ARG BRANCH=unknown
-RUN go build -ldflags="-X main.commit=${COMMIT} -X main.branch=${BRANCH}" -o /friemon ./main.go
+RUN go build -ldflags="-X main.commit=${COMMIT} -X main.branch=${BRANCH}" -o /friemon ./cmd/friemon/main.go
 
 # ---- Final Stage ----
 # Use a specific version of the alpine image for a small and secure base

@@ -31,7 +31,7 @@ build:
 .PHONY: run
 run:
 	@echo "Running $(PROJECT_NAME)..."
-	$(GORUN) ./main.go $(DEFAULT_FLAGS)
+	$(GORUN) ./cmd/friemon/main.go $(DEFAULT_FLAGS)
 
 .PHONY: test
 test:
