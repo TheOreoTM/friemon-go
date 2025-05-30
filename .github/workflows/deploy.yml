@@ -135,6 +135,6 @@ jobs:
                       sleep 15
 
                       echo "Running database migrations..."
-                      migrate -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" -path ./friemon/db/migrations up
+                      migrate -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" -path ./friemon/internal/infrastructure/db/migrations up
 
                       echo "Deployment successful!"
