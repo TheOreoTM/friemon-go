@@ -59,9 +59,12 @@ func incrementXp(b *friemon.Bot, e *events.MessageCreate) {
 			embedB.SetThumbnail("attachment://character.png")
 		}
 
-		e.Client().Rest().CreateMessage(e.ChannelID, discord.MessageCreate{
+		_, err = e.Client().Rest().CreateMessage(e.ChannelID, discord.MessageCreate{
 			Embeds: []discord.Embed{embedB.Build()},
 			Files:  []*discord.File{image},
 		})
+		if err != nil {
+			slog.Error("Failed to send level up message", slog.Any("err", err))
+		}
 	}
 }

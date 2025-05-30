@@ -106,6 +106,10 @@ jobs:
                       echo "Navigating to project directory..."
                       cd ~/friemon-go
 
+                      echo "Pulling latest changes from Git..."
+                      git fetch origin
+                      git reset --hard origin/main
+
                       echo "Setting environment variables for deployment..."
                       export BOT_TOKEN="${{ secrets.BOT_TOKEN }}"
                       export POSTGRES_USER="friemon" # Or from secrets if you prefer

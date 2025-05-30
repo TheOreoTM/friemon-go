@@ -53,12 +53,15 @@ func claimCharacterButton(b *friemon.Bot) handler.ComponentHandler {
 			return errors.New("failed to find button")
 		}
 
-		e.Client().Rest().UpdateMessage(
+		_, err = e.Client().Rest().UpdateMessage(
 			e.Message.ChannelID,
 			e.Message.ID,
 			discord.NewMessageUpdateBuilder().
 				AddActionRow(button.AsDisabled().WithLabel("Invited by "+e.Member().User.Username)).
 				Build())
+		if err != nil {
+			return err
+		}
 
 		e.Respond(discord.InteractionResponseTypeCreateMessage,
 			discord.NewMessageCreateBuilder().
