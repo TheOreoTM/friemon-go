@@ -13,7 +13,9 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/gateway"
+	"github.com/disgoorg/disgo/rest"
 	"github.com/disgoorg/paginator"
+	"github.com/disgoorg/snowflake/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 	"github.com/theoreotm/friemon/internal/infrastructure/db"
@@ -36,7 +38,6 @@ type Bot struct {
 
 func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	db, conn, err := db.NewDB(cfg.Database)
-
 	if err != nil {
 		slog.Error("failed to initialize database: %v", slog.String("err", err.Error()))
 		os.Exit(-1)
@@ -60,17 +61,6 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 
 	slog.Info("Connected to Redis", slog.String("addr", cfg.Redis.Addr))
 
-	schedulerBackend, err := scheduler.NewRedisBackendWithClient(
-		redisClient,
-		"scheduler", // key prefix
-	)
-	if err != nil {
-		slog.Error("Failed to create scheduler backend", slog.Any("err", err))
-		os.Exit(-1)
-	}
-
-	sched := scheduler.New(schedulerBackend)
-
 	b := &Bot{
 		Cfg:       cfg,
 		Paginator: paginator.New(),
@@ -78,7 +68,6 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 		Context:   ctx,
 		conn:      conn,
 		Redis:     redisClient,
-		Scheduler: sched,
 	}
 
 	b.DB = db
@@ -89,6 +78,21 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	}
 
 	return b
+}
+
+// Implement the dependencies interface for scheduler tasks
+func (b *Bot) GetRestClient() interface {
+	GetMessage(channelID, messageID snowflake.ID, opts ...rest.RequestOpt) (*discord.Message, error)
+	UpdateMessage(channelID, messageID snowflake.ID, messageUpdate discord.MessageUpdate, opts ...rest.RequestOpt) (*discord.Message, error)
+} {
+	return b.Client.Rest()
+}
+
+func (b *Bot) GetCache() interface {
+	DeleteChannelCharacter(channelID snowflake.ID) error
+	ResetInteractionCount(channelID snowflake.ID) error
+} {
+	return b.Cache
 }
 
 type BuildInfo struct {
@@ -114,6 +118,14 @@ func (b *Bot) SetupBot(listeners ...disgobot.EventListener) error {
 
 func (b *Bot) Close(ctx context.Context) error {
 	slog.Info("Closing friemon...")
+
+	// Stop scheduler first
+	if b.Scheduler != nil {
+		if err := b.Scheduler.Stop(); err != nil {
+			slog.Error("Failed to stop scheduler", slog.Any("err", err))
+		}
+	}
+
 	b.Client.Close(ctx)
 
 	// Close Redis connection
