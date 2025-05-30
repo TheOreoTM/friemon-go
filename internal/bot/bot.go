@@ -36,6 +36,7 @@ type Bot struct {
 
 func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	db, conn, err := db.NewDB(cfg.Database)
+
 	if err != nil {
 		slog.Error("failed to initialize database: %v", slog.String("err", err.Error()))
 		os.Exit(-1)
