@@ -1,4 +1,4 @@
-package friemon
+package main
 
 import (
 	"context"
