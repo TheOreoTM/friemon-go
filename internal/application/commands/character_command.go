@@ -87,6 +87,22 @@ func handleCharacter(b *bot.Bot) handler.CommandHandler {
 			SetColor(int(character.Color)).
 			Build()
 
+		err := b.DB.CreateCharacter(e.Ctx, userID, character)
+		if err != nil {
+			log.Error("Failed to create character",
+				logger.DiscordUserID(userID),
+				logger.CharacterName(character.CharacterName()),
+				logger.ErrorField(err),
+			)
+			return e.CreateMessage(ErrorMessage("Failed to create character!"))
+		}
+
+		log.Info("Character created successfully",
+			logger.DiscordUserID(userID),
+			logger.CharacterID(character.ID),
+			logger.CharacterName(character.CharacterName()),
+		)
+
 		// Handle image with error logging
 		var response discord.MessageCreate
 		if img, err := character.Image(); err == nil {
