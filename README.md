@@ -43,7 +43,7 @@ Follow these instructions to set up the project for local development and start 
     ```
 
 2.  **Configuration**
-    You can configure the application using a `.env` file or by editing `config.toml`. Environment variables take precedence.
+    You can configure the application using a `.env` file. Environment variables take precedence.
 
     * **Create a `.env` file** by copying the example:
         ```bash

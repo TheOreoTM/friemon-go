@@ -43,7 +43,6 @@ WORKDIR /app
 
 # Copy binary
 COPY --from=builder /app/friemon .
-COPY config.example.toml config.toml
 COPY ./assets ./assets
 
 # Show runtime environment info
