@@ -3,24 +3,25 @@ name: Friemon CI/CD Pipeline
 on:
     push:
         branches:
-            - main # Triggers on push to the main branch
+            - main
     pull_request:
         branches:
-            - main # Triggers on pull requests targeting the main branch
+            - main
 
 env:
-    # Define environment variables accessible in all jobs
-    # Use your actual image name on Docker Hub or GHCR
-    DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/friemon-bot # Example for Docker Hub
-    # For GHCR, it would be: ghcr.io/${{ github.repository_owner }}/friemon-bot
+    DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/friemon-bot
+    REGISTRY: docker.io # or ghcr.io for GitHub Container Registry
 
 jobs:
     build-and-test:
         name: Build, Test, and Push Docker Image
         runs-on: ubuntu-latest
+        outputs:
+            image-digest: ${{ steps.build.outputs.digest }}
+            image-tag: ${{ steps.commit.outputs.sha_short }}
         permissions:
             contents: read
-            packages: write # Required for pushing to GHCR
+            packages: write
 
         steps:
             - name: Checkout code
@@ -29,69 +30,70 @@ jobs:
             - name: Set up Go
               uses: actions/setup-go@v5
               with:
-                  go-version: "1.22" # Use the Go version from your go.mod
+                  go-version: "1.22"
 
-            - name: Install golangci-lint
-              run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.57.2
+            - name: Cache Go modules
+              uses: actions/cache@v3
+              with:
+                  path: ~/go/pkg/mod
+                  key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+                  restore-keys: |
+                      ${{ runner.os }}-go-
+
+            - name: Install dependencies
+              run: |
+                  go mod download
+                  go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+                  go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
             - name: Run linters
-              run: $(go env GOPATH)/bin/golangci-lint run ./...
+              run: golangci-lint run ./...
               continue-on-error: true
+
+            - name: Generate SQLC code
+              run: sqlc generate
 
             - name: Run tests
               run: go test -v ./...
-
-            - name: Generate SQLC code
-              # Assuming sqlc is installed in your Dockerfile or you install it here
-              # If not, you might need to run this step inside a container that has sqlc
-              # or install it: go install [github.com/sqlc-dev/sqlc/cmd/sqlc@latest](https://github.com/sqlc-dev/sqlc/cmd/sqlc@latest)
-              # For simplicity, this step assumes sqlc is available or generated before commit.
-              # If your Docker build relies on generated files, ensure they are present.
-              # Consider adding a step to install sqlc if needed:
-              # run: go install [github.com/sqlc-dev/sqlc/cmd/sqlc@latest](https://github.com/sqlc-dev/sqlc/cmd/sqlc@latest) && $(go env GOPATH)/bin/sqlc generate
-              run: echo "Skipping sqlc generate in CI, assuming it's done locally or in Dockerfile build"
 
             - name: Get Git commit short SHA
               id: commit
               run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
             - name: Log in to Docker Hub
-              if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only on push to main
+              if: github.event_name == 'push' && github.ref == 'refs/heads/main'
               uses: docker/login-action@v3
               with:
                   username: ${{ secrets.DOCKER_USERNAME }}
                   password: ${{ secrets.DOCKER_PASSWORD }}
 
-            # Alternative: Log in to GitHub Container Registry
-            # - name: Log in to GitHub Container Registry
-            #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-            #   uses: docker/login-action@v3
-            #   with:
-            #     registry: ghcr.io
-            #     username: ${{ github.repository_owner }}
-            #     password: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN has write:packages permission
-
             - name: Build and push Docker image
+              id: build
               uses: docker/build-push-action@v5
               with:
                   context: .
                   file: ./Dockerfile
-                  # Tags the image with 'latest' and the short commit SHA
+                  platforms: linux/amd64
                   tags: |
                       ${{ env.DOCKER_IMAGE_NAME }}:latest
                       ${{ env.DOCKER_IMAGE_NAME }}:${{ steps.commit.outputs.sha_short }}
-                  # Push only when the event is a push to the main branch
+                      ${{ env.DOCKER_IMAGE_NAME }}:build-${{ github.run_number }}
                   push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-                  # Pass commit and branch as build arguments to Dockerfile
                   build-args: |
                       COMMIT=${{ steps.commit.outputs.sha_short }}
                       BRANCH=${{ github.ref_name }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
 
     deploy:
         name: Deploy to VPS
         runs-on: ubuntu-latest
-        needs: build-and-test # This job runs only if build-and-test succeeds
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only on push to main
+        needs: build-and-test
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        environment: production # Add environment protection if needed
 
         steps:
             - name: Deploy to VPS via SSH
@@ -100,41 +102,218 @@ jobs:
                   host: ${{ secrets.VPS_SSH_HOST }}
                   username: ${{ secrets.VPS_SSH_USER }}
                   key: ${{ secrets.VPS_SSH_KEY }}
-                  port: 22 # Default SSH port, change if yours is different
+                  port: 22
+                  timeout: 300s
+                  command_timeout: 300s
                   script: |
-                      set -e # Exit immediately if a command exits with a non-zero status.
-                      echo "Navigating to project directory..."
-                      cd ~/friemon-go
+                      set -e
 
-                      echo "Pulling latest changes from Git..."
+                      # Configuration
+                      PROJECT_DIR="$HOME/friemon-go"
+                      IMAGE_TAG="${{ needs.build-and-test.outputs.image-tag }}"
+                      BUILD_NUMBER="${{ github.run_number }}"
+
+                      echo "🚀 Starting deployment..."
+                      echo "📦 Using image tag: $IMAGE_TAG"
+                      echo "🔢 Build number: $BUILD_NUMBER"
+
+                      # Navigate to project directory
+                      echo "📁 Navigating to project directory..."
+                      cd "$PROJECT_DIR"
+
+                      # Backup current .env if it exists
+                      if [ -f .env ]; then
+                          echo "💾 Backing up current .env..."
+                          cp .env .env.backup.$(date +%Y%m%d-%H%M%S)
+                      fi
+
+                      # Create/update .env file with all required variables
+                      echo "⚙️ Creating .env file..."
+                      cat > .env << EOF
+                      # Bot Configuration
+                      BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+                      BOT_VERSION=1.0.0
+                      DEV_MODE=false
+                      SYNC_COMMANDS=true
+
+                      # Logging
+                      LOG_LEVEL=info
+                      LOG_FORMAT=json
+                      LOG_ADD_SOURCE=false
+                      LOG_OUTPUT_PATH=stdout
+
+                      # Database
+                      DB_HOST=postgres
+                      DB_PORT=5432
+                      DB_USER=friemon
+                      DB_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+                      DB_NAME=friemon
+                      DB_SSL_MODE=disable
+
+                      # PostgreSQL (for docker-compose)
+                      POSTGRES_USER=friemon
+                      POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+                      POSTGRES_DB=friemon
+
+                      # Redis
+                      REDIS_ADDR=redis:6379
+                      REDIS_PASSWORD=
+                      REDIS_DB=0
+
+                      # PgAdmin
+                      PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
+
+                      # Docker Image
+                      FRIEMON_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG
+
+                      # General
+                      TZ=UTC
+                      ASSETS_DIR=./assets
+                      EOF
+
+                      echo "✅ .env file created"
+
+                      # Pull latest code (as backup, though we're using Docker images)
+                      echo "📥 Pulling latest code..."
                       git fetch origin
                       git reset --hard origin/main
 
-                      echo "Setting environment variables for deployment..."
-                      export BOT_TOKEN="${{ secrets.BOT_TOKEN }}"
-                      export POSTGRES_USER="friemon" # Or from secrets if you prefer
-                      export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
-                      export POSTGRES_DB="friemon" # Or from secrets
-                      export REDIS_PASSWORD="" # Or from secrets
+                      # Remove old images to save space
+                      echo "🧹 Cleaning up old Docker images..."
+                      docker image prune -f
+                      docker system prune -f --volumes=false
 
-                      echo "Pulling latest Docker image..."
-                      docker pull ${{ env.DOCKER_IMAGE_NAME }}:latest
+                      # Pull the specific image we just built
+                      echo "📦 Pulling Docker image: ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG"
+                      docker pull ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG
 
-                      echo "Stopping and removing old containers..."
-                      docker-compose down
+                      # Verify image was pulled
+                      if ! docker images | grep -q "$IMAGE_TAG"; then
+                          echo "❌ Failed to pull image with tag $IMAGE_TAG"
+                          exit 1
+                      fi
+                      echo "✅ Image pulled successfully"
 
-                      echo "Starting new containers..."
-                      BOT_TOKEN="${{ secrets.BOT_TOKEN }}" \
-                      POSTGRES_USER="friemon" \
-                      POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}" \
-                      POSTGRES_DB="friemon" \
-                      PGADMIN_PASSWORD="${{ secrets.PGADMIN_PASSWORD }}" \
+                      # Update docker-compose.yml to use specific image tag
+                      echo "📝 Updating docker-compose.yml to use specific image..."
+                      if [ -f docker-compose.override.yml ]; then
+                          rm docker-compose.override.yml
+                      fi
+
+                      # Create override file to use specific image
+                      cat > docker-compose.override.yml << EOF
+                      version: '3.9'
+                      services:
+                        bot:
+                          image: ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG
+                          pull_policy: never  # Don't pull, we already have the image
+                      EOF
+
+                      # Stop current containers
+                      echo "⏹️ Stopping current containers..."
+                      docker-compose down --remove-orphans
+
+                      # Start new containers
+                      echo "🚀 Starting new containers..."
                       docker-compose up -d --remove-orphans
 
-                      echo "Waiting for PostgreSQL to be ready..."
-                      sleep 15
+                      # Wait for PostgreSQL to be ready
+                      echo "⏳ Waiting for PostgreSQL to be ready..."
+                      timeout=60
+                      counter=0
+                      while ! docker-compose exec -T postgres pg_isready -U friemon -d friemon >/dev/null 2>&1; do
+                          if [ $counter -eq $timeout ]; then
+                              echo "❌ PostgreSQL failed to become ready in time"
+                              docker-compose logs postgres
+                              exit 1
+                          fi
+                          echo "Waiting for PostgreSQL... ($counter/$timeout)"
+                          sleep 2
+                          counter=$((counter + 1))
+                      done
+                      echo "✅ PostgreSQL is ready"
 
-                      echo "Running database migrations..."
-                      migrate -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}?sslmode=disable" -path ./internal/infrastructure/db/migrations up
+                      # Check if migrate command is available
+                      if ! command -v migrate &> /dev/null; then
+                          echo "📦 Installing migrate CLI..."
+                          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+                          sudo mv migrate /usr/local/bin/
+                          rm -f README.md LICENSE
+                      fi
 
-                      echo "Deployment successful!"
+                      # Run database migrations
+                      echo "🔄 Running database migrations..."
+                      migrate -database "postgres://friemon:${{ secrets.POSTGRES_PASSWORD }}@localhost:5433/friemon?sslmode=disable" \
+                              -path ./internal/infrastructure/db/migrations up
+
+                      # Verify bot is running
+                      echo "🔍 Verifying bot container..."
+                      sleep 5
+                      if ! docker-compose ps | grep friemon_bot | grep -q "Up"; then
+                          echo "❌ Bot container is not running!"
+                          echo "📋 Container logs:"
+                          docker-compose logs bot
+                          exit 1
+                      fi
+
+                      # Show final status
+                      echo "📊 Deployment Status:"
+                      echo "===================="
+                      docker-compose ps
+                      echo ""
+                      echo "📋 Recent bot logs:"
+                      echo "=================="
+                      docker-compose logs --tail=20 bot
+                      echo ""
+                      echo "✨ Deployment completed successfully!"
+                      echo "🏷️ Deployed image: ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG"
+                      echo "🔢 Build number: $BUILD_NUMBER"
+                      echo "⏰ Deployed at: $(date)"
+
+            - name: Health Check
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                  host: ${{ secrets.VPS_SSH_HOST }}
+                  username: ${{ secrets.VPS_SSH_USER }}
+                  key: ${{ secrets.VPS_SSH_KEY }}
+                  port: 22
+                  script: |
+                      cd ~/friemon-go
+
+                      echo "🏥 Running health checks..."
+
+                      # Wait a bit for the bot to fully start
+                      sleep 10
+
+                      # Check if bot container is healthy
+                      if ! docker-compose ps | grep friemon_bot | grep -q "Up"; then
+                          echo "❌ Health check failed: Bot container is not running"
+                          exit 1
+                      fi
+
+                      # Check bot logs for any immediate errors
+                      recent_logs=$(docker-compose logs --tail=50 bot)
+                      if echo "$recent_logs" | grep -i "error\|fatal\|panic"; then
+                          echo "⚠️ Warning: Found error messages in recent logs"
+                          echo "$recent_logs"
+                      fi
+
+                      echo "✅ Health check passed!"
+
+    notify:
+        name: Notify Deployment Status
+        runs-on: ubuntu-latest
+        needs: [build-and-test, deploy]
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        steps:
+            - name: Notify Success
+              if: needs.deploy.result == 'success'
+              run: |
+                  echo "✅ Deployment successful!"
+                  echo "Image: ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.build-and-test.outputs.image-tag }}"
+
+            - name: Notify Failure
+              if: needs.deploy.result == 'failure'
+              run: |
+                  echo "❌ Deployment failed!"
+                  exit 1
