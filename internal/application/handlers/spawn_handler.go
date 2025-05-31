@@ -24,14 +24,14 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 	channelID := e.ChannelID
 	guildID := e.GuildID
 
-	log.Debug("Spawn handler triggered",
+	log.Info("Spawn handler triggered",
 		logger.Handler("spawn"),
 		logger.DiscordChannelID(channelID),
 		logger.DiscordGuildID(*guildID),
 	)
 
 	defer func() {
-		log.Debug("Spawn handler completed",
+		log.Info("Spawn handler completed",
 			logger.Handler("spawn"),
 			logger.DiscordChannelID(channelID),
 			logger.Duration(time.Since(start)),
@@ -40,7 +40,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 
 	// Get and log current interaction count
 	count := b.Cache.GetInteractionCount(channelID)
-	log.Debug("Checking interaction count",
+	log.Info("Checking interaction count",
 		logger.DiscordChannelID(channelID),
 		zap.Int("current_count", count),
 		zap.Int("required_threshold", spawnThreshold),
@@ -48,7 +48,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 	)
 
 	if count < spawnThreshold {
-		log.Debug("Threshold not met, skipping spawn",
+		log.Info("Threshold not met, skipping spawn",
 			logger.DiscordChannelID(channelID),
 			zap.Int("count", count),
 			zap.Int("needed", spawnThreshold-count),
@@ -58,7 +58,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 
 	// Check for existing character
 	if existingChar, err := b.Cache.GetChannelCharacter(channelID); err == nil && existingChar != nil {
-		log.Debug("Character already exists in channel",
+		log.Info("Character already exists in channel",
 			logger.DiscordChannelID(channelID),
 			logger.CharacterID(existingChar.ID),
 			logger.CharacterName(existingChar.CharacterName()),
@@ -89,7 +89,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 		return
 	}
 
-	log.Debug("Character cached successfully",
+	log.Info("Character cached successfully",
 		logger.DiscordChannelID(channelID),
 		logger.CharacterID(character.ID),
 		logger.CacheKey(fmt.Sprintf("channel:%s:character", channelID)),
@@ -126,7 +126,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 		embed.Image = &discord.EmbedResource{URL: "attachment://" + img.Name}
 		files = []*discord.File{img}
 
-		log.Debug("Character image loaded",
+		log.Info("Character image loaded",
 			logger.CharacterName(character.CharacterName()),
 			zap.String("image_file", img.Name),
 		)
@@ -179,7 +179,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 			logger.ErrorField(err),
 		)
 	} else {
-		log.Debug("Cleanup task scheduled",
+		log.Info("Cleanup task scheduled",
 			logger.DiscordChannelID(channelID),
 			logger.DiscordMessageID(msg.ID),
 			zap.Duration("cleanup_in", 3*time.Minute),
