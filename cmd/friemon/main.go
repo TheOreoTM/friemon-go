@@ -27,12 +27,10 @@ var (
 
 func main() {
 	// Parse command line flags
-	var configPath string
-	flag.StringVar(&configPath, "config", "config.toml", "Path to configuration file")
 	flag.Parse()
 
 	// Load configuration
-	cfg, err := bot.LoadConfig(configPath)
+	cfg, err := bot.LoadConfig()
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		os.Exit(1)
