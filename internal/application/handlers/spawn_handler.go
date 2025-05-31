@@ -53,7 +53,30 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 			zap.Int("count", count),
 			zap.Int("needed", spawnThreshold-count),
 		)
+		err := b.Cache.IncrementInteractionCount(channelID)
+		if err != nil {
+			log.Error("Failed to increment interaction count",
+				logger.DiscordChannelID(channelID),
+				logger.ErrorField(err),
+			)
+			return
+		}
+		log.Info("Interaction count incremented",
+			logger.DiscordChannelID(channelID),
+		)
 		return
+	} else {
+		err := b.Cache.ResetInteractionCount(channelID)
+		if err != nil {
+			log.Error("Failed to reset interaction count",
+				logger.DiscordChannelID(channelID),
+				logger.ErrorField(err),
+			)
+			return
+		}
+		log.Info("Interaction count reset",
+			logger.DiscordChannelID(channelID),
+		)
 	}
 
 	// Check for existing character
