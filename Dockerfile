@@ -1,7 +1,7 @@
 FROM golang:1.23-alpine AS builder
 
-# Install git
-RUN apk add --no-cache git
+# Install git and file utility
+RUN apk add --no-cache git file
 
 # Set working directory
 WORKDIR /app
@@ -13,7 +13,13 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build for the target platform (let Docker handle architecture)
+# Show build environment info
+RUN echo "=== BUILD ENVIRONMENT ===" && \
+    go env GOOS GOARCH && \
+    uname -m && \
+    echo "========================="
+
+# Build for the target platform
 ARG COMMIT=unknown
 ARG BRANCH=unknown
 RUN go build \
@@ -21,16 +27,30 @@ RUN go build \
     -o friemon \
     ./cmd/friemon/main.go
 
+# Check what we built
+RUN echo "=== BUILT BINARY INFO ===" && \
+    ls -la friemon && \
+    file friemon && \
+    echo "========================="
+
 # Runtime stage
 FROM alpine:3.20
 
-RUN apk --no-cache add ca-certificates
+# Install utilities for debugging
+RUN apk --no-cache add ca-certificates file
+
 WORKDIR /app
 
 # Copy binary
 COPY --from=builder /app/friemon .
 COPY config.example.toml config.toml
 COPY ./assets ./assets
+
+# Show runtime environment info
+RUN echo "=== RUNTIME ENVIRONMENT ===" && \
+    uname -m && \
+    file friemon && \
+    echo "============================"
 
 # Make executable
 RUN chmod +x friemon
@@ -42,4 +62,9 @@ RUN addgroup -g 1001 -S appgroup && \
 
 USER appuser
 
-CMD ["./friemon"]
+# Try to run the binary and show any errors
+CMD echo "=== ATTEMPTING TO RUN ===" && \
+    echo "Container arch: $(uname -m)" && \
+    echo "Binary info: $(file ./friemon)" && \
+    echo "=========================" && \
+    ./friemon
