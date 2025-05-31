@@ -57,22 +57,20 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 					logger.Duration(duration),
 					zap.Any("panic", r),
 				)
-				panic(r) // Re-panic after logging
+				_ = e.CreateMessage(ErrorMessage("An unexpected error occurred."))
 			}
-			log.Debug("Info command completed", // Changed to Debug for completion
+			log.Debug("Info command completed",
 				logger.Command("info"),
 				logger.DiscordUserID(userID),
 				logger.Duration(duration),
 			)
 		}()
 
-		// Get character parameter if provided
-		characterParam := ""
-		data := e.SlashCommandInteractionData()
+		// Directly get the "character" option string.
+		// If the option is not provided, this will return an empty string.
+		characterParam := e.SlashCommandInteractionData().String("character")
 
-		// Correct way to access an option from the map
-		if opt, ok := data.Options["character"]; ok {
-			characterParam = string(opt.Value)
+		if characterParam != "" {
 			log.Debug("Character parameter provided",
 				logger.DiscordUserID(userID),
 				zap.String("character_param", characterParam),
@@ -83,10 +81,11 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 		var err error
 
 		if characterParam != "" {
-			// Parse UUID and get specific character
+			// Attempt to parse the parameter as a UUID (character ID)
 			var characterID uuid.UUID
 			characterID, parseErr := uuid.Parse(characterParam)
 			if parseErr == nil {
+				// Parameter is a valid UUID, try to fetch this specific character
 				log.Debug("Getting specific character by ID",
 					logger.DiscordUserID(userID),
 					logger.CharacterID(characterID),
@@ -97,13 +96,12 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 					log.Warn("Failed to get specific character by ID",
 						logger.DiscordUserID(userID),
 						logger.CharacterID(characterID),
-						logger.ErrorField(err), // Using ErrorField as you mentioned
+						logger.ErrorField(err),
 					)
-					// Check if the character belongs to the user or if it's a general not found
-					// For simplicity, keeping the original error message
-					return e.CreateMessage(ErrorMessage("Character not found or doesn't belong to you!"))
+					return e.CreateMessage(ErrorMessage("Character not found with that ID!"))
 				}
-				// Ensure the character belongs to the user if fetched by ID
+
+				// Important: Check if the fetched character belongs to the user
 				if ch.OwnerID != userID.String() {
 					log.Warn("User attempted to access character not owned by them",
 						logger.DiscordUserID(userID),
@@ -112,31 +110,33 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 					)
 					return e.CreateMessage(ErrorMessage("This character doesn't belong to you!"))
 				}
-
 			} else {
-				log.Warn("Invalid character UUID provided",
+				// Parameter was not a valid UUID.
+				// This can happen if autocomplete fails or user types something random.
+				log.Warn("Invalid character ID format provided in parameter",
 					logger.DiscordUserID(userID),
-					zap.String("invalid_uuid", characterParam),
-					logger.ErrorField(parseErr), // Using ErrorField
+					zap.String("invalid_param_value", characterParam),
+					logger.ErrorField(parseErr),
 				)
-				return e.CreateMessage(ErrorMessage("Invalid character ID format! Please select from the list or provide a valid ID."))
+				return e.CreateMessage(ErrorMessage(fmt.Sprintf("Invalid character ID: '%s'. Please select from the list or provide a valid ID.", characterParam)))
 			}
 		} else {
-			// Get user's selected character
-			log.Debug("Getting selected character for user",
+			// No character parameter provided, get the user's selected character
+			log.Debug("No character parameter, getting selected character for user",
 				logger.DiscordUserID(userID),
 			)
 
 			ch, err = b.DB.GetSelectedCharacter(e.Ctx, userID)
 			if err != nil {
-				log.Info("User has no selected character", // This is an expected scenario, so Info level
+				log.Info("User has no selected character",
 					logger.DiscordUserID(userID),
-					logger.ErrorField(err), // Using ErrorField
+					logger.ErrorField(err),
 				)
-				return e.CreateMessage(InfoMessage("You don't have a selected character! Use `/select` to choose one."))
+				return e.CreateMessage(InfoMessage("You don't have a selected character! Use `/select` to choose one, or specify a character ID with this command."))
 			}
 		}
 
+		// At this point, 'ch' should hold the character to display info for.
 		log.Info("Character info retrieved successfully",
 			logger.DiscordUserID(userID),
 			logger.CharacterID(ch.ID),
@@ -145,8 +145,6 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 		)
 
 		// --- Build embed and send response ---
-		// (This part of your code would go here)
-		// Example:
 		var detailFieldValues = [][]string{
 			{"ID", ch.ID.String()},
 			{"Owner", fmt.Sprintf("<@%s>", ch.OwnerID)},
@@ -165,45 +163,46 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 			{"Speed", fmt.Sprintf("%d", ch.Spd())},
 		}
 
-		embed := discord.NewEmbedBuilder().
+		embedBuilder := discord.NewEmbedBuilder().
 			SetTitle(fmt.Sprintf("%s %s (Lvl %d)", ch.Data().Emoji, ch.CharacterName(), ch.Level)).
 			SetColor(int(ch.Color))
 
 		for _, detail := range detailFieldValues {
-			embed.AddField(detail[0], detail[1], true)
+			embedBuilder.AddField(detail[0], detail[1], true)
 		}
-		if len(detailFieldValues)%2 != 0 {
-			embed.AddField("", "", true) // Add empty field for spacing
-		}
+		// if len(detailFieldValues)%2 != 0 { // Ensure alignment for stats
+		// 	embedBuilder.AddField("0", "0", true)
+		// }
 		for _, stat := range statFieldValues {
-			embed.AddField(stat[0], stat[1], true)
+			embedBuilder.AddField(stat[0], stat[1], true)
 		}
 
-		messageCreate := discord.MessageCreate{Embeds: []discord.Embed{embed.Build()}}
+		messageCreate := discord.MessageCreate{}
 
 		if img, imgErr := ch.Image(); imgErr == nil {
-			embed.SetImage("attachment://" + img.Name) // Update image URL in embed
+			embedBuilder.SetImage("attachment://" + img.Name)
 			messageCreate.Files = []*discord.File{img}
-			messageCreate.Embeds = []discord.Embed{embed.Build()} // Rebuild embed with image
 		} else {
 			log.Warn("Failed to get image for info command",
 				logger.CharacterID(ch.ID),
 				logger.ErrorField(imgErr),
 			)
 		}
+		messageCreate.Embeds = []discord.Embed{embedBuilder.Build()}
 
 		return e.CreateMessage(messageCreate)
 		// --- End of embed building ---
 	}
 }
 
+// handleGetCharacterAutocomplete remains the same as your previous version
 func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
-	log := logger.NewLogger("autocomplete.character") // Logger for autocomplete
+	log := logger.NewLogger("autocomplete.character")
 
 	return func(e *handler.AutocompleteEvent) error {
 		start := time.Now()
 		userID := e.User().ID
-		query := e.Data.String("character") // Assuming 'character' is the option name
+		query := e.Data.String("character")
 
 		log.Debug("Autocomplete request received",
 			logger.DiscordUserID(userID),
@@ -217,8 +216,6 @@ func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
 				logger.DiscordUserID(userID),
 				logger.ErrorField(err),
 			)
-			// It's better to return an empty result or a generic error choice
-			// than to show "You dont have any characters" if there's a DB error.
 			return e.AutocompleteResult([]discord.AutocompleteChoice{
 				discord.AutocompleteChoiceString{Name: "Error fetching characters", Value: "error"},
 			})
@@ -232,7 +229,6 @@ func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
 		}
 
 		for _, ch := range chars {
-			// Improved matching: check nickname, character name, and IDX
 			displayName := ch.CharacterName()
 			if ch.Nickname != "" {
 				displayName = ch.Nickname
@@ -248,14 +244,14 @@ func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
 				}
 				results = append(results, discord.AutocompleteChoiceString{
 					Name:  choiceName,
-					Value: ch.ID.String(), // Value should be the ID for selection
+					Value: ch.ID.String(),
 				})
 			}
 		}
 
 		var choices []discord.AutocompleteChoice
 		for i, r := range results {
-			if i >= 25 { // Discord limit for autocomplete choices
+			if i >= 25 {
 				break
 			}
 			choices = append(choices, r)

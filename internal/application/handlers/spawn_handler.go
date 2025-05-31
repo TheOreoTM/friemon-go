@@ -158,7 +158,12 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 		logger.DiscordChannelID(channelID),
 		logger.DiscordMessageID(msg.ID),
 		logger.CharacterName(character.CharacterName()),
-		zap.String("message_url", fmt.Sprintf("https://discord.com/channels/%s/%s/%s", guildID, channelID, msg.ID)),
+		zap.String("message_url", func() string {
+			if guildID == nil {
+				return ""
+			}
+			return fmt.Sprintf("https://discord.com/channels/%s/%s/%s", guildID, channelID, msg.ID)
+		}()),
 	)
 
 	// Schedule cleanup
