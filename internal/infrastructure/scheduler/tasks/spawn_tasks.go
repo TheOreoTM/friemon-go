@@ -68,6 +68,10 @@ func (h *SpawnTaskHandlers) DisableSpawnButton(ctx context.Context, data types.T
 		return errors.New("failed to find button")
 	}
 
+	if button.Disabled {
+		return nil
+	}
+
 	_, err = restClient.UpdateMessage(
 		channelID,
 		messageID,

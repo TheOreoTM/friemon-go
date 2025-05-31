@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/disgoorg/disgo/discord"
@@ -27,16 +26,9 @@ func incrementXp(b *bot.Bot, e *events.MessageCreate) {
 	// Get user's selected character
 	character, err := b.DB.GetSelectedCharacter(b.Context, userID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Debug("User has no selected character for XP",
-				logger.DiscordUserID(userID),
-			)
-		} else {
-			log.Error("Failed to get selected character for XP",
-				logger.DiscordUserID(userID),
-				logger.ErrorField(err),
-			)
-		}
+		log.Debug("User has no selected character for XP",
+			logger.DiscordUserID(userID),
+		)
 		return
 	}
 
