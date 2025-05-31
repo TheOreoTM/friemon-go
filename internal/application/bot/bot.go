@@ -121,6 +121,8 @@ func (b *Bot) SetupBot(listeners ...disgobot.EventListener) error {
 	b.Scheduler = scheduler
 	if err := b.Scheduler.Start(); err != nil {
 		return fmt.Errorf("failed to start scheduler: %w", err)
+	} else {
+		slog.Info("Scheduler started")
 	}
 
 	return nil
@@ -130,6 +132,7 @@ func (b *Bot) Close(ctx context.Context) error {
 	slog.Info("Closing friemon...")
 
 	// Stop scheduler first
+	slog.Info("Stopping scheduler...")
 	if b.Scheduler != nil {
 		if err := b.Scheduler.Stop(); err != nil {
 			slog.Error("Failed to stop scheduler", slog.Any("err", err))
