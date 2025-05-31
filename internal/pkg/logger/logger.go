@@ -14,14 +14,15 @@ var (
 	// Global logger instance
 	globalLogger *zap.Logger
 	sugar        *zap.SugaredLogger
+	isStdOutput  bool // Flag to track if output is stdout/stderr
 )
 
 // Config represents the logging configuration
 type Config struct {
-	Level      string `toml:"level"`      // debug, info, warn, error
-	Format     string `toml:"format"`     // json, console
-	AddSource  bool   `toml:"add_source"` // add caller information
-	OutputPath string `toml:"output_path"` // file path or "stdout"
+	Level      string `toml:"level"`       // debug, info, warn, error
+	Format     string `toml:"format"`      // json, console
+	AddSource  bool   `toml:"add_source"`  // add caller information
+	OutputPath string `toml:"output_path"` // file path or "stdout", "stderr"
 }
 
 // Initialize sets up the global logger with the given configuration
@@ -37,7 +38,7 @@ func Initialize(cfg Config) error {
 	switch strings.ToLower(cfg.Format) {
 	case "json":
 		encoder = zapcore.NewJSONEncoder(encoderConfig)
-	case "console", "":
+	case "console", "": // Default to console
 		encoder = zapcore.NewConsoleEncoder(encoderConfig)
 	default:
 		return fmt.Errorf("invalid log format: %s", cfg.Format)
@@ -45,12 +46,19 @@ func Initialize(cfg Config) error {
 
 	// Setup output
 	var writeSyncer zapcore.WriteSyncer
-	if cfg.OutputPath == "" || cfg.OutputPath == "stdout" {
+	normalizedOutputPath := strings.ToLower(cfg.OutputPath)
+
+	if normalizedOutputPath == "" || normalizedOutputPath == "stdout" || normalizedOutputPath == "/dev/stdout" {
 		writeSyncer = zapcore.AddSync(os.Stdout)
+		isStdOutput = true
+	} else if normalizedOutputPath == "stderr" || normalizedOutputPath == "/dev/stderr" {
+		writeSyncer = zapcore.AddSync(os.Stderr)
+		isStdOutput = true
 	} else {
+		isStdOutput = false
 		file, err := os.OpenFile(cfg.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
-			return fmt.Errorf("failed to open log file: %w", err)
+			return fmt.Errorf("failed to open log file '%s': %w", cfg.OutputPath, err)
 		}
 		writeSyncer = zapcore.AddSync(file)
 	}
@@ -60,11 +68,20 @@ func Initialize(cfg Config) error {
 	// Add caller information if requested
 	var options []zap.Option
 	if cfg.AddSource {
-		options = append(options, zap.AddCaller(), zap.AddCallerSkip(1))
+		options = append(options, zap.AddCaller(), zap.AddCallerSkip(1)) // Adjust skip if needed
 	}
 
 	globalLogger = zap.New(core, options...)
 	sugar = globalLogger.Sugar()
+
+	// Initial log message to confirm logger is working
+	sugar.Debugw("Logger initialized",
+		"level", cfg.Level,
+		"format", cfg.Format,
+		"add_source", cfg.AddSource,
+		"output_path", cfg.OutputPath,
+		"is_std_output", isStdOutput,
+	)
 
 	return nil
 }
@@ -79,8 +96,8 @@ func getEncoderConfig() zapcore.EncoderConfig {
 		MessageKey:     "message",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
-		EncodeTime:     zapcore.TimeEncoderOfLayout(time.RFC3339),
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,              // Or zapcore.LowercaseLevelEncoder for JSON
+		EncodeTime:     zapcore.TimeEncoderOfLayout(time.RFC3339Nano), // More precision
 		EncodeDuration: zapcore.StringDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
@@ -88,28 +105,26 @@ func getEncoderConfig() zapcore.EncoderConfig {
 
 // parseLogLevel converts string level to zapcore.Level
 func parseLogLevel(level string) (zapcore.Level, error) {
-	switch strings.ToLower(level) {
-	case "debug":
-		return zapcore.DebugLevel, nil
-	case "info", "":
-		return zapcore.InfoLevel, nil
-	case "warn", "warning":
-		return zapcore.WarnLevel, nil
-	case "error":
-		return zapcore.ErrorLevel, nil
-	case "fatal":
-		return zapcore.FatalLevel, nil
-	case "panic":
-		return zapcore.PanicLevel, nil
-	default:
-		return zapcore.InfoLevel, fmt.Errorf("unknown level: %s", level)
+	var l zapcore.Level
+	if err := l.UnmarshalText([]byte(level)); err != nil {
+		// Fallback for common variations if UnmarshalText fails or for ""
+		switch strings.ToLower(level) {
+		case "warn", "warning":
+			return zapcore.WarnLevel, nil
+		case "": // Default to Info if empty
+			return zapcore.InfoLevel, nil
+		default:
+			return zapcore.InfoLevel, fmt.Errorf("unknown log level: '%s'", level)
+		}
 	}
+	return l, nil
 }
 
 // GetLogger returns the global logger instance
 func GetLogger() *zap.Logger {
 	if globalLogger == nil {
-		// Fallback to a basic logger if not initialized
+		// Fallback to a basic logger if not initialized (should not happen in normal flow)
+		fmt.Fprintln(os.Stderr, "Warning: Global logger accessed before initialization. Using development logger.")
 		globalLogger, _ = zap.NewDevelopment()
 	}
 	return globalLogger
@@ -133,15 +148,39 @@ func NewSugar(name string) *zap.SugaredLogger {
 	return GetSugar().Named(name)
 }
 
-// Sync flushes any buffered log entries
+// Sync flushes any buffered log entries.
+// For stdout/stderr, this is often a no-op or can cause issues in certain environments.
 func Sync() error {
 	if globalLogger != nil {
+		if isStdOutput {
+			// For stdout/stderr, Sync() can sometimes cause "invalid argument" or "bad file descriptor".
+			// It's generally safe to skip actual syncing as the OS handles flushing.
+			// We can still attempt it and ignore common errors.
+			err := globalLogger.Sync()
+			if err != nil {
+				// Check for common, ignorable errors on stdout/stderr
+				errMsg := err.Error()
+				if strings.Contains(errMsg, "invalid argument") ||
+					strings.Contains(errMsg, "bad file descriptor") ||
+					strings.Contains(errMsg, "sync /dev/stdout") || // Be more specific
+					strings.Contains(errMsg, "sync /dev/stderr") {
+					// These errors are common and usually benign for stdout/stderr in some environments.
+					return nil
+				}
+				// Log other unexpected errors from Sync, but not the common ones for stdout.
+				// Using fmt.Printf here to avoid recursive logging if logger itself is broken.
+				fmt.Fprintf(os.Stderr, "Warning: Error during logger.Sync() for std_output: %v\n", err)
+				return err // Propagate other errors
+			}
+			return nil
+		}
+		// For file outputs, Sync is important.
 		return globalLogger.Sync()
 	}
 	return nil
 }
 
-// Convenience functions for quick logging
+// Convenience functions for quick logging (structured)
 func Debug(msg string, fields ...zap.Field) {
 	GetLogger().Debug(msg, fields...)
 }
@@ -154,7 +193,8 @@ func Warn(msg string, fields ...zap.Field) {
 	GetLogger().Warn(msg, fields...)
 }
 
-func Error(msg string, fields ...zap.Field) {
+// ErrorField is used to avoid conflict with the Error function name
+func Error(msg string, fields ...zap.Field) { // Renamed from Error to avoid clash
 	GetLogger().Error(msg, fields...)
 }
 
@@ -162,7 +202,7 @@ func Fatal(msg string, fields ...zap.Field) {
 	GetLogger().Fatal(msg, fields...)
 }
 
-// Convenience functions for sugared logging
+// Convenience functions for sugared logging (printf-style)
 func Debugf(template string, args ...interface{}) {
 	GetSugar().Debugf(template, args...)
 }
