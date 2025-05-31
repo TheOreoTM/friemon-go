@@ -21,11 +21,11 @@ func init() {
 var cmdInfo = &Command{
 	Cmd: discord.SlashCommandCreate{
 		Name:        "info",
-		Description: "Get your current character",
+		Description: "Get your current character's information",
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionString{
 				Name:         "character",
-				Description:  "The character you want to get info about",
+				Description:  "The ID of the character you want to get info about (optional)",
 				Required:     false,
 				Autocomplete: true,
 			},
@@ -57,7 +57,7 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 					logger.Duration(duration),
 					zap.Any("panic", r),
 				)
-				_ = e.CreateMessage(ErrorMessage("An unexpected error occurred."))
+				_ = e.CreateMessage(ErrorMessage("An unexpected error occurred while processing your request."))
 			}
 			log.Debug("Info command completed",
 				logger.Command("info"),
@@ -66,77 +66,41 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 			)
 		}()
 
-		// Directly get the "character" option string.
-		// If the option is not provided, this will return an empty string.
 		characterParam := e.SlashCommandInteractionData().String("character")
+		var ch *entities.Character
+		var err error
 
 		if characterParam != "" {
 			log.Debug("Character parameter provided",
 				logger.DiscordUserID(userID),
 				zap.String("character_param", characterParam),
 			)
-		}
-
-		var ch *entities.Character
-		var err error
-
-		if characterParam != "" {
-			// Attempt to parse the parameter as a UUID (character ID)
 			var characterID uuid.UUID
 			characterID, parseErr := uuid.Parse(characterParam)
 			if parseErr == nil {
-				// Parameter is a valid UUID, try to fetch this specific character
-				log.Debug("Getting specific character by ID",
-					logger.DiscordUserID(userID),
-					logger.CharacterID(characterID),
-				)
-
+				log.Debug("Getting specific character by ID", logger.DiscordUserID(userID), logger.CharacterID(characterID))
 				ch, err = b.DB.GetCharacter(e.Ctx, characterID)
 				if err != nil {
-					log.Warn("Failed to get specific character by ID",
-						logger.DiscordUserID(userID),
-						logger.CharacterID(characterID),
-						logger.ErrorField(err),
-					)
+					log.Warn("Failed to get specific character by ID", logger.DiscordUserID(userID), logger.CharacterID(characterID), logger.ErrorField(err))
 					return e.CreateMessage(ErrorMessage("Character not found with that ID!"))
 				}
-
-				// Important: Check if the fetched character belongs to the user
 				if ch.OwnerID != userID.String() {
-					log.Warn("User attempted to access character not owned by them",
-						logger.DiscordUserID(userID),
-						logger.CharacterID(characterID),
-						logger.CharacterOwner(ch.OwnerID),
-					)
+					log.Warn("User attempted to access character not owned by them", logger.DiscordUserID(userID), logger.CharacterID(characterID), logger.CharacterOwner(ch.OwnerID))
 					return e.CreateMessage(ErrorMessage("This character doesn't belong to you!"))
 				}
 			} else {
-				// Parameter was not a valid UUID.
-				// This can happen if autocomplete fails or user types something random.
-				log.Warn("Invalid character ID format provided in parameter",
-					logger.DiscordUserID(userID),
-					zap.String("invalid_param_value", characterParam),
-					logger.ErrorField(parseErr),
-				)
+				log.Warn("Invalid character ID format provided in parameter", logger.DiscordUserID(userID), zap.String("invalid_param_value", characterParam), logger.ErrorField(parseErr))
 				return e.CreateMessage(ErrorMessage(fmt.Sprintf("Invalid character ID: '%s'. Please select from the list or provide a valid ID.", characterParam)))
 			}
 		} else {
-			// No character parameter provided, get the user's selected character
-			log.Debug("No character parameter, getting selected character for user",
-				logger.DiscordUserID(userID),
-			)
-
+			log.Debug("No character parameter, getting selected character for user", logger.DiscordUserID(userID))
 			ch, err = b.DB.GetSelectedCharacter(e.Ctx, userID)
 			if err != nil {
-				log.Info("User has no selected character",
-					logger.DiscordUserID(userID),
-					logger.ErrorField(err),
-				)
+				log.Info("User has no selected character", logger.DiscordUserID(userID), logger.ErrorField(err))
 				return e.CreateMessage(InfoMessage("You don't have a selected character! Use `/select` to choose one, or specify a character ID with this command."))
 			}
 		}
 
-		// At this point, 'ch' should hold the character to display info for.
 		log.Info("Character info retrieved successfully",
 			logger.DiscordUserID(userID),
 			logger.CharacterID(ch.ID),
@@ -144,58 +108,78 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 			logger.CharacterLevel(ch.Level),
 		)
 
-		// --- Build embed and send response ---
-		var detailFieldValues = [][]string{
-			{"ID", ch.ID.String()},
-			{"Owner", fmt.Sprintf("<@%s>", ch.OwnerID)},
-			{"Claimed", ch.ClaimedTimestamp.Format("Jan 02, 2006")},
-			{"Personality", ch.Personality.String()},
-			{"Shiny", fmt.Sprintf("%t", ch.Shiny)},
-			{"IV Total", ch.IvPercentage()},
+		// --- Build the Embed ---
+		embedBuilder := discord.NewEmbedBuilder()
+		characterData := ch.Data() // Get base character data
+
+		// Title: Emoji Nickname (Original Name) - Lvl X
+		titleName := ch.CharacterName()
+		if ch.Nickname != "" {
+			titleName = fmt.Sprintf("%s (%s)", ch.Nickname, ch.CharacterName())
 		}
+		embedBuilder.SetTitle(fmt.Sprintf("%s %s - Lvl %d", characterData.Emoji, titleName, ch.Level))
+		embedBuilder.SetColor(int(ch.Color))
 
-		var statFieldValues = [][]string{
-			{"HP", fmt.Sprintf("%d", ch.HP())},
-			{"Attack", fmt.Sprintf("%d", ch.Atk())},
-			{"Defense", fmt.Sprintf("%d", ch.Def())},
-			{"Sp. Atk", fmt.Sprintf("%d", ch.SpAtk())},
-			{"Sp. Def", fmt.Sprintf("%d", ch.SpDef())},
-			{"Speed", fmt.Sprintf("%d", ch.Spd())},
-		}
-
-		embedBuilder := discord.NewEmbedBuilder().
-			SetTitle(fmt.Sprintf("%s %s (Lvl %d)", ch.Data().Emoji, ch.CharacterName(), ch.Level)).
-			SetColor(int(ch.Color))
-
-		for _, detail := range detailFieldValues {
-			embedBuilder.AddField(detail[0], detail[1], true)
-		}
-		// if len(detailFieldValues)%2 != 0 { // Ensure alignment for stats
-		// 	embedBuilder.AddField("0", "0", true)
-		// }
-		for _, stat := range statFieldValues {
-			embedBuilder.AddField(stat[0], stat[1], true)
-		}
-
-		messageCreate := discord.MessageCreate{}
-
+		// Thumbnail/Image
+		// If you have a smaller "thumbnail" sprite and a larger "image" sprite, you can choose here.
+		// For now, let's assume ch.Image() provides the main visual.
+		var messageFiles []*discord.File
 		if img, imgErr := ch.Image(); imgErr == nil {
-			embedBuilder.SetImage("attachment://" + img.Name)
-			messageCreate.Files = []*discord.File{img}
+			embedBuilder.SetThumbnail("attachment://" + img.Name) // Use SetThumbnail for a side image
+			messageFiles = append(messageFiles, img)
 		} else {
-			log.Warn("Failed to get image for info command",
+			log.Warn("Failed to get image for info command thumbnail",
 				logger.CharacterID(ch.ID),
 				logger.ErrorField(imgErr),
 			)
 		}
-		messageCreate.Embeds = []discord.Embed{embedBuilder.Build()}
+
+		// Section 1: Details
+		embedBuilder.AddField("Details", "──────────────────", false) // Separator
+		embedBuilder.AddField("ID", fmt.Sprintf("`%s`", ch.ID.String()), true)
+		embedBuilder.AddField("Owner", fmt.Sprintf("<@%s>", ch.OwnerID), true)
+		embedBuilder.AddField("Claimed", ch.ClaimedTimestamp.Format("Jan 02, 2006"), true)
+
+		embedBuilder.AddField("Personality", ch.Personality.String(), true)
+		shinyStr := "No"
+		if ch.Shiny {
+			shinyStr = "Yes ✨"
+		}
+		embedBuilder.AddField("Shiny", shinyStr, true)
+		embedBuilder.AddField("IV Total", fmt.Sprintf("**%s**", ch.IvPercentage()), true)
+
+		// Section 2: Stats
+		embedBuilder.AddField("Base Stats", "──────────────────", false) // Separator
+		embedBuilder.AddField("HP", fmt.Sprintf("%d", ch.HP()), true)
+		embedBuilder.AddField("Attack", fmt.Sprintf("%d", ch.Atk()), true)
+		embedBuilder.AddField("Defense", fmt.Sprintf("%d", ch.Def()), true)
+		embedBuilder.AddField("Sp. Atk", fmt.Sprintf("%d", ch.SpAtk()), true)
+		embedBuilder.AddField("Sp. Def", fmt.Sprintf("%d", ch.SpDef()), true)
+		embedBuilder.AddField("Speed", fmt.Sprintf("%d", ch.Spd()), true)
+
+		// Section 3: IVs (Individual Values)
+		embedBuilder.AddField("Individual Values (IVs)", "──────────────────", false)
+		embedBuilder.AddField("IV HP", fmt.Sprintf("%d/31", ch.IvHP), true)
+		embedBuilder.AddField("IV Atk", fmt.Sprintf("%d/31", ch.IvAtk), true)
+		embedBuilder.AddField("IV Def", fmt.Sprintf("%d/31", ch.IvDef), true)
+		embedBuilder.AddField("IV Sp.Atk", fmt.Sprintf("%d/31", ch.IvSpAtk), true)
+		embedBuilder.AddField("IV Sp.Def", fmt.Sprintf("%d/31", ch.IvSpDef), true)
+		embedBuilder.AddField("IV Spd", fmt.Sprintf("%d/31", ch.IvSpd), true)
+
+		// Footer
+		embedBuilder.SetFooterText(fmt.Sprintf("Friemon Bot | Character IDX: %d", ch.IDX))
+		embedBuilder.SetTimestamp(time.Now())
+
+		messageCreate := discord.MessageCreate{
+			Embeds: []discord.Embed{embedBuilder.Build()},
+			Files:  messageFiles,
+		}
 
 		return e.CreateMessage(messageCreate)
-		// --- End of embed building ---
 	}
 }
 
-// handleGetCharacterAutocomplete remains the same as your previous version
+// handleGetCharacterAutocomplete function remains the same
 func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
 	log := logger.NewLogger("autocomplete.character")
 
