@@ -131,7 +131,7 @@ func (tb *TaskBuilder) execute() (string, error) {
 		return "", fmt.Errorf("failed to enqueue task: %w", err)
 	}
 
-	tb.scheduler.logger.Debug("Task scheduled",
+	tb.scheduler.logger.Info("Task scheduled",
 		"task_type", tb.taskType,
 		"task_id", info.ID,
 		"queue", info.Queue,
