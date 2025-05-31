@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"log/slog"
+	"fmt"
 	"time"
 
 	"github.com/disgoorg/disgo/discord"
@@ -9,80 +9,175 @@ import (
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 const (
-	spawnThreshold = 4 // Change accordingly
+	spawnThreshold = 4
 )
 
 func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
-	slog.Info("Interaction count", slog.Int("count", b.Cache.GetInteractionCount(e.ChannelID)))
-	err := b.Cache.IncrementInteractionCount(e.ChannelID)
-	if err != nil {
-		slog.Error("Failed to increment interaction count", slog.Any("err", err))
-		return
-	}
+	log := logger.NewLogger("handlers.spawn")
 
-	if b.Cache.GetInteractionCount(e.ChannelID) <= spawnThreshold {
-		return
-	}
+	start := time.Now()
+	channelID := e.ChannelID
+	guildID := e.GuildID
 
-	randomCharacter := entities.RandomCharacterSpawn()
-
-	spawnEmbed := discord.NewEmbedBuilder().
-		SetTitlef("A wandering %v appeared!", randomCharacter.CharacterName()).
-		SetDescriptionf("Click the button below to add %v to your characters!", randomCharacter.CharacterName()).
-		SetColor(constants.ColorDefault)
-
-	spawnImage, err := randomCharacter.Image()
-	if err != nil {
-		slog.Error("Failed to get character image", slog.Any("err", err))
-		err := b.Cache.ResetInteractionCount(e.ChannelID)
-		if err != nil {
-			slog.Error("Failed to reset interaction count", slog.Any("err", err))
-			return
-		}
-		return
-	} else {
-		spawnEmbed.SetImage("attachment://character.png")
-	}
-
-	message, err := e.Client().Rest().CreateMessage(e.ChannelID,
-		discord.NewMessageCreateBuilder().
-			AddEmbeds(spawnEmbed.Build()).
-			AddFiles(spawnImage).
-			AddActionRow(discord.NewPrimaryButton("Invite to party", "/claim")).
-			Build(),
+	log.Debug("Spawn handler triggered",
+		logger.Handler("spawn"),
+		logger.DiscordChannelID(channelID),
+		logger.DiscordGuildID(*guildID),
 	)
 
-	if err != nil {
-		slog.Error("Failed to send spawn message",
-			slog.String("channel_id", e.ChannelID.String()),
-			slog.String("guild_id", e.GuildID.String()),
-			slog.Int("character_id", randomCharacter.CharacterID),
-			slog.Any("err", err))
+	defer func() {
+		log.Debug("Spawn handler completed",
+			logger.Handler("spawn"),
+			logger.DiscordChannelID(channelID),
+			logger.Duration(time.Since(start)),
+		)
+	}()
 
+	// Get and log current interaction count
+	count := b.Cache.GetInteractionCount(channelID)
+	log.Debug("Checking interaction count",
+		logger.DiscordChannelID(channelID),
+		zap.Int("current_count", count),
+		zap.Int("required_threshold", spawnThreshold),
+		logger.CacheHit(count > 0),
+	)
+
+	if count < spawnThreshold {
+		log.Debug("Threshold not met, skipping spawn",
+			logger.DiscordChannelID(channelID),
+			zap.Int("count", count),
+			zap.Int("needed", spawnThreshold-count),
+		)
 		return
 	}
 
-	_, err = b.Scheduler.After(time.Minute*5).
-		With("message_id", message.ID.String()).
-		With("channel_id", e.ChannelID.String()).
-		Emit("disable_spawn_button")
-	if err != nil {
-		slog.Error("Failed to schedule disable_spawn_button task", slog.Any("err", err))
+	// Check for existing character
+	if existingChar, err := b.Cache.GetChannelCharacter(channelID); err == nil && existingChar != nil {
+		log.Debug("Character already exists in channel",
+			logger.DiscordChannelID(channelID),
+			logger.CharacterID(existingChar.ID),
+			logger.CharacterName(existingChar.CharacterName()),
+		)
 		return
 	}
 
-	err = b.Cache.SetChannelCharacter(e.ChannelID, randomCharacter)
-	if err != nil {
-		slog.Error("Failed to set channel character", slog.Any("err", err))
+	// Generate character
+	character := entities.RandomCharacterSpawn()
+
+	log.Info("Spawning character",
+		logger.Handler("spawn"),
+		logger.DiscordChannelID(channelID),
+		logger.CharacterName(character.CharacterName()),
+		logger.CharacterLevel(character.Level),
+		zap.Bool("shiny", character.Shiny),
+		zap.String("personality", character.Personality.String()),
+		zap.String("iv_percentage", character.IvPercentage()),
+	)
+
+	// Cache character
+	if err := b.Cache.SetChannelCharacter(channelID, character); err != nil {
+		log.Error("Failed to cache spawned character",
+			logger.DiscordChannelID(channelID),
+			logger.CharacterID(character.ID),
+			logger.ErrorField(err),
+		)
 		return
 	}
 
-	err = b.Cache.ResetInteractionCount(e.ChannelID)
+	log.Debug("Character cached successfully",
+		logger.DiscordChannelID(channelID),
+		logger.CharacterID(character.ID),
+		logger.CacheKey(fmt.Sprintf("channel:%s:character", channelID)),
+	)
+
+	// Reset interaction count
+	if err := b.Cache.ResetInteractionCount(channelID); err != nil {
+		log.Warn("Failed to reset interaction count",
+			logger.DiscordChannelID(channelID),
+			logger.ErrorField(err),
+		)
+	} else {
+		log.Debug("Interaction count reset",
+			logger.DiscordChannelID(channelID),
+		)
+	}
+
+	// Build spawn message
+	embed := discord.NewEmbedBuilder().
+		SetTitle(fmt.Sprintf("A wild %s appeared!", character.CharacterName())).
+		SetDescription("Click the button below to claim it!").
+		SetColor(constants.ColorInfo).
+		Build()
+
+	components := []discord.ContainerComponent{
+		discord.NewActionRow(
+			discord.NewPrimaryButton("Claim", "claim_character"),
+		),
+	}
+
+	// Handle image
+	var files []*discord.File
+	if img, err := character.Image(); err == nil {
+		embed.Image = &discord.EmbedResource{URL: "attachment://" + img.Name}
+		files = []*discord.File{img}
+
+		log.Debug("Character image loaded",
+			logger.CharacterName(character.CharacterName()),
+			zap.String("image_file", img.Name),
+		)
+	} else {
+		log.Warn("Failed to load character image",
+			logger.CharacterName(character.CharacterName()),
+			logger.ErrorField(err),
+		)
+	}
+
+	// Send spawn message
+	msg, err := b.Client.Rest().CreateMessage(channelID, discord.MessageCreate{
+		Embeds:     []discord.Embed{embed},
+		Components: components,
+		Files:      files,
+	})
+
 	if err != nil {
-		slog.Error("Failed to reset interaction count", slog.Any("err", err))
+		log.Error("Failed to send spawn message",
+			logger.DiscordChannelID(channelID),
+			logger.CharacterID(character.ID),
+			logger.ErrorField(err),
+		)
 		return
+	}
+
+	log.Info("Character spawned successfully",
+		logger.Handler("spawn"),
+		logger.DiscordChannelID(channelID),
+		logger.DiscordMessageID(msg.ID),
+		logger.CharacterName(character.CharacterName()),
+		zap.String("message_url", fmt.Sprintf("https://discord.com/channels/%s/%s/%s", guildID, channelID, msg.ID)),
+	)
+
+	// Schedule cleanup
+	if _, err := b.Scheduler.After(3*time.Minute).
+		Type("cleanup_character").
+		With("channel_id", channelID.String()).
+		With("message_id", msg.ID.String()).
+		Emit("cleanup_character"); err != nil {
+
+		log.Error("Failed to schedule cleanup task",
+			logger.DiscordChannelID(channelID),
+			logger.DiscordMessageID(msg.ID),
+			logger.ErrorField(err),
+		)
+	} else {
+		log.Debug("Cleanup task scheduled",
+			logger.DiscordChannelID(channelID),
+			logger.DiscordMessageID(msg.ID),
+			zap.Duration("cleanup_in", 3*time.Minute),
+		)
 	}
 }

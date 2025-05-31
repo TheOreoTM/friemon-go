@@ -2,69 +2,123 @@ package handlers
 
 import (
 	"database/sql"
-	"log/slog"
+	"fmt"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
+	"github.com/theoreotm/friemon/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func incrementXp(b *bot.Bot, e *events.MessageCreate) {
-	leveledUp := false
-	selectedCharacter, err := b.DB.GetSelectedCharacter(b.Context, e.Message.Author.ID)
+	log := logger.NewLogger("handlers.xp")
+
+	userID := e.Message.Author.ID
+	channelID := e.ChannelID
+
+	log.Debug("XP increment triggered",
+		logger.Handler("xp"),
+		logger.DiscordUserID(userID),
+		logger.DiscordChannelID(channelID),
+	)
+
+	// Get user's selected character
+	character, err := b.DB.GetSelectedCharacter(b.Context, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return
-		}
-
-		slog.Error("Failed to get selected character", slog.Any("err", err))
-		return
-	}
-
-	if selectedCharacter == nil {
-		return
-	}
-
-	if selectedCharacter.Level == 100 {
-		return
-	}
-
-	selectedCharacter.XP += randomInt(10, 40)
-	if selectedCharacter.XP > selectedCharacter.MaxXP() {
-		selectedCharacter.XP = 0
-
-		if selectedCharacter.Level+1 >= 100 {
-			selectedCharacter.Level = 100
+			log.Debug("User has no selected character for XP",
+				logger.DiscordUserID(userID),
+			)
 		} else {
-			selectedCharacter.Level++
-			leveledUp = true
+			log.Error("Failed to get selected character for XP",
+				logger.DiscordUserID(userID),
+				logger.ErrorField(err),
+			)
 		}
-
-	}
-
-	char, err := b.DB.UpdateCharacter(b.Context, selectedCharacter.ID, selectedCharacter)
-	if err != nil {
 		return
 	}
 
+	oldLevel := character.Level
+	oldXP := character.XP
+
+	log.Debug("Current character stats",
+		logger.DiscordUserID(userID),
+		logger.CharacterID(character.ID),
+		logger.CharacterName(character.CharacterName()),
+		logger.CharacterLevel(oldLevel),
+		zap.Int("current_xp", oldXP),
+		zap.Int("max_xp", character.MaxXP()),
+	)
+
+	// Increment XP (you can adjust this logic)
+	xpGain := 1 // Base XP gain
+	character.XP += xpGain
+
+	// Check for level up
+	leveledUp := false
+	newLevel := character.Level
+
+	for character.XP >= character.MaxXP() && character.Level < 100 {
+		character.XP -= character.MaxXP()
+		character.Level++
+		leveledUp = true
+		newLevel = character.Level
+
+		log.Info("Character leveled up!",
+			logger.DiscordUserID(userID),
+			logger.CharacterID(character.ID),
+			logger.CharacterName(character.CharacterName()),
+			zap.Int("old_level", oldLevel),
+			zap.Int("new_level", newLevel),
+		)
+	}
+
+	// Update character in database
+	updatedChar, err := b.DB.UpdateCharacter(b.Context, character.ID, character)
+	if err != nil {
+		log.Error("Failed to update character XP",
+			logger.DiscordUserID(userID),
+			logger.CharacterID(character.ID),
+			logger.ErrorField(err),
+		)
+		return
+	}
+
+	log.Debug("Character XP updated",
+		logger.DiscordUserID(userID),
+		logger.CharacterID(character.ID),
+		zap.Int("xp_gained", xpGain),
+		zap.Int("new_xp", updatedChar.XP),
+		zap.Int("new_level", updatedChar.Level),
+	)
+
+	// Send level up notification if applicable
 	if leveledUp {
-		embedB := discord.NewEmbedBuilder().
-			SetTitlef("Congratulations %v!", e.Message.Author.EffectiveName()).
-			SetDescriptionf("Your %v is now level %v!", char.Format("n"), char.Level).
-			SetColor(constants.ColorDefault)
+		embed := discord.NewEmbedBuilder().
+			SetTitle("🎉 Level Up!").
+			SetDescription(fmt.Sprintf("Your %s reached level %d!",
+				character.CharacterName(), newLevel)).
+			SetColor(constants.ColorSuccess).
+			Build()
 
-		image, err := char.Image()
-		if err == nil {
-			embedB.SetThumbnail("attachment://character.png")
-		}
-
-		_, err = e.Client().Rest().CreateMessage(e.ChannelID, discord.MessageCreate{
-			Embeds: []discord.Embed{embedB.Build()},
-			Files:  []*discord.File{image},
-		})
-		if err != nil {
-			slog.Error("Failed to send level up message", slog.Any("err", err))
+		if _, err := b.Client.Rest().CreateMessage(channelID, discord.MessageCreate{
+			Embeds: []discord.Embed{embed},
+		}); err != nil {
+			log.Error("Failed to send level up notification",
+				logger.DiscordUserID(userID),
+				logger.DiscordChannelID(channelID),
+				logger.CharacterID(character.ID),
+				logger.ErrorField(err),
+			)
+		} else {
+			log.Info("Level up notification sent",
+				logger.DiscordUserID(userID),
+				logger.DiscordChannelID(channelID),
+				logger.CharacterName(character.CharacterName()),
+				zap.Int("new_level", newLevel),
+			)
 		}
 	}
 }

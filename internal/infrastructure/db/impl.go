@@ -4,11 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 var _ Store = (*Queries)(nil)
@@ -133,39 +136,88 @@ func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Cha
 }
 
 func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *entities.Character) error {
-	user, err := q.GetUser(ctx, ownerID)
+	log := logger.NewLogger("database.characters")
+	start := time.Now()
+
+	log.Debug("Creating character",
+		logger.Operation("create_character"),
+		logger.DiscordUserID(ownerID),
+		logger.CharacterName(char.CharacterName()),
+		logger.CharacterLevel(char.Level),
+	)
+
+	defer func() {
+		log.Debug("Create character operation completed",
+			logger.Operation("create_character"),
+			logger.Duration(time.Since(start)),
+		)
+	}()
+
+	params := modelCharToDBChar(char)
+	params.OwnerID = ownerID.String()
+
+	dbChar, err := q.createCharacter(ctx, params)
 	if err != nil {
+		log.Error("Failed to create character",
+			logger.Operation("create_character"),
+			logger.DiscordUserID(ownerID),
+			logger.CharacterName(char.CharacterName()),
+			logger.ErrorField(err),
+		)
 		return err
 	}
 
-	char.IDX = user.NextIdx
+	// Update the character with the generated ID
+	char.ID = dbChar.ID
 
-	_, err = q.createCharacter(ctx, modelCharToDBChar(char))
-	if err != nil {
-		return err
-	}
-
-	user.NextIdx++
-	_, err = q.UpdateUser(ctx, *user)
-	if err != nil {
-		return err
-	}
+	log.Info("Character created successfully",
+		logger.Operation("create_character"),
+		logger.DiscordUserID(ownerID),
+		logger.CharacterID(char.ID),
+		logger.CharacterName(char.CharacterName()),
+	)
 
 	return nil
 }
 
 func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
-	dbchs, err := q.getCharactersForUser(ctx, userID.String())
+	log := logger.NewLogger("database.characters")
+	start := time.Now()
+
+	log.Debug("Getting characters for user",
+		logger.Operation("get_user_characters"),
+		logger.DiscordUserID(userID),
+	)
+
+	defer func() {
+		log.Debug("Get user characters operation completed",
+			logger.Operation("get_user_characters"),
+			logger.Duration(time.Since(start)),
+		)
+	}()
+
+	dbChars, err := q.getCharactersForUser(ctx, userID.String())
 	if err != nil {
+		log.Error("Failed to get characters for user",
+			logger.Operation("get_user_characters"),
+			logger.DiscordUserID(userID),
+			logger.ErrorField(err),
+		)
 		return nil, err
 	}
 
-	chars := make([]entities.Character, 0, len(dbchs))
-	for _, dbch := range dbchs {
-		chars = append(chars, *dbCharToModelChar(dbch))
+	characters := make([]entities.Character, len(dbChars))
+	for i, dbChar := range dbChars {
+		characters[i] = *dbCharToModelChar(dbChar)
 	}
 
-	return chars, nil
+	log.Info("Characters retrieved for user",
+		logger.Operation("get_user_characters"),
+		logger.DiscordUserID(userID),
+		zap.Int("character_count", len(characters)),
+	)
+
+	return characters, nil
 }
 
 func dbUserToModelUser(dbUser User) *entities.User {

@@ -3,13 +3,15 @@ package commands
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/google/uuid"
-	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func init() {
@@ -35,114 +37,246 @@ var cmdInfo = &Command{
 }
 
 func handleInfo(b *bot.Bot) handler.CommandHandler {
+	log := logger.NewLogger("commands.info")
+
 	return func(e *handler.CommandEvent) error {
-		id := e.SlashCommandInteractionData().String("character")
+		start := time.Now()
+		userID := e.User().ID
+
+		log.Info("Info command started",
+			logger.Command("info"),
+			logger.DiscordUserID(userID),
+		)
+
+		defer func() {
+			duration := time.Since(start)
+			if r := recover(); r != nil {
+				log.Error("Panic in info command",
+					logger.Command("info"),
+					logger.DiscordUserID(userID),
+					logger.Duration(duration),
+					zap.Any("panic", r),
+				)
+				panic(r) // Re-panic after logging
+			}
+			log.Debug("Info command completed", // Changed to Debug for completion
+				logger.Command("info"),
+				logger.DiscordUserID(userID),
+				logger.Duration(duration),
+			)
+		}()
+
+		// Get character parameter if provided
+		characterParam := ""
+		data := e.SlashCommandInteractionData()
+
+		// Correct way to access an option from the map
+		if opt, ok := data.Options["character"]; ok {
+			characterParam = string(opt.Value)
+			log.Debug("Character parameter provided",
+				logger.DiscordUserID(userID),
+				zap.String("character_param", characterParam),
+			)
+		}
+
 		var ch *entities.Character
+		var err error
 
-		if id != "" && id != "-1" {
-			dbChar, err := b.DB.GetCharacter(e.Ctx, uuid.MustParse(id))
-			if err != nil {
-				ch = nil
+		if characterParam != "" {
+			// Parse UUID and get specific character
+			var characterID uuid.UUID
+			characterID, parseErr := uuid.Parse(characterParam)
+			if parseErr == nil {
+				log.Debug("Getting specific character by ID",
+					logger.DiscordUserID(userID),
+					logger.CharacterID(characterID),
+				)
+
+				ch, err = b.DB.GetCharacter(e.Ctx, characterID)
+				if err != nil {
+					log.Warn("Failed to get specific character by ID",
+						logger.DiscordUserID(userID),
+						logger.CharacterID(characterID),
+						logger.ErrorField(err), // Using ErrorField as you mentioned
+					)
+					// Check if the character belongs to the user or if it's a general not found
+					// For simplicity, keeping the original error message
+					return e.CreateMessage(ErrorMessage("Character not found or doesn't belong to you!"))
+				}
+				// Ensure the character belongs to the user if fetched by ID
+				if ch.OwnerID != userID.String() {
+					log.Warn("User attempted to access character not owned by them",
+						logger.DiscordUserID(userID),
+						logger.CharacterID(characterID),
+						logger.CharacterOwner(ch.OwnerID),
+					)
+					return e.CreateMessage(ErrorMessage("This character doesn't belong to you!"))
+				}
+
+			} else {
+				log.Warn("Invalid character UUID provided",
+					logger.DiscordUserID(userID),
+					zap.String("invalid_uuid", characterParam),
+					logger.ErrorField(parseErr), // Using ErrorField
+				)
+				return e.CreateMessage(ErrorMessage("Invalid character ID format! Please select from the list or provide a valid ID."))
 			}
-			ch = dbChar
-		}
+		} else {
+			// Get user's selected character
+			log.Debug("Getting selected character for user",
+				logger.DiscordUserID(userID),
+			)
 
-		if ch == nil {
-			selectedCh, err := b.DB.GetSelectedCharacter(e.Ctx, e.Member().User.ID)
+			ch, err = b.DB.GetSelectedCharacter(e.Ctx, userID)
 			if err != nil {
-				return e.CreateMessage(discord.MessageCreate{
-					Content: fmt.Sprintf("Error: %s", err),
-				})
+				log.Info("User has no selected character", // This is an expected scenario, so Info level
+					logger.DiscordUserID(userID),
+					logger.ErrorField(err), // Using ErrorField
+				)
+				return e.CreateMessage(InfoMessage("You don't have a selected character! Use `/select` to choose one."))
 			}
-			ch = selectedCh
 		}
 
-		var detailFieldValues = [][]string{}
-		detailFieldValues = append(detailFieldValues, []string{"XP", fmt.Sprintf("%d/%d", ch.XP, ch.MaxXP())})
-		detailFieldValues = append(detailFieldValues, []string{"Personality", ch.Personality.String()})
+		log.Info("Character info retrieved successfully",
+			logger.DiscordUserID(userID),
+			logger.CharacterID(ch.ID),
+			logger.CharacterName(ch.CharacterName()),
+			logger.CharacterLevel(ch.Level),
+		)
 
-		detailFieldContent := ""
-		for _, v := range detailFieldValues {
-			detailFieldContent += fmt.Sprintf("**%s:** %s\n", v[0], v[1])
+		// --- Build embed and send response ---
+		// (This part of your code would go here)
+		// Example:
+		var detailFieldValues = [][]string{
+			{"ID", ch.ID.String()},
+			{"Owner", fmt.Sprintf("<@%s>", ch.OwnerID)},
+			{"Claimed", ch.ClaimedTimestamp.Format("Jan 02, 2006")},
+			{"Personality", ch.Personality.String()},
+			{"Shiny", fmt.Sprintf("%t", ch.Shiny)},
+			{"IV Total", ch.IvPercentage()},
 		}
 
-		var statFieldValues = [][]string{}
-		statFieldValues = append(statFieldValues, []string{"HP", fmt.Sprintf("%d – IV: %d/31", ch.MaxHP(), ch.IvHP)})
-		statFieldValues = append(statFieldValues, []string{"Attack", fmt.Sprintf("%d – IV: %d/31", ch.Atk(), ch.IvAtk)})
-		statFieldValues = append(statFieldValues, []string{"Defense", fmt.Sprintf("%d – IV: %d/31", ch.Def(), ch.IvDef)})
-		statFieldValues = append(statFieldValues, []string{"Sp. Atk", fmt.Sprintf("%d – IV: %d/31", ch.SpAtk(), ch.IvSpAtk)})
-		statFieldValues = append(statFieldValues, []string{"Sp. Def", fmt.Sprintf("%d – IV: %d/31", ch.SpDef(), ch.IvSpDef)})
-		statFieldValues = append(statFieldValues, []string{"Speed", fmt.Sprintf("%d – IV: %d/31", ch.Spd(), ch.IvSpd)})
-		statFieldValues = append(statFieldValues, []string{"Total IV", ch.IvPercentage()})
-		statFieldContent := ""
-		for _, v := range statFieldValues {
-			statFieldContent += fmt.Sprintf("**%s:** %s\n", v[0], v[1])
+		var statFieldValues = [][]string{
+			{"HP", fmt.Sprintf("%d", ch.HP())},
+			{"Attack", fmt.Sprintf("%d", ch.Atk())},
+			{"Defense", fmt.Sprintf("%d", ch.Def())},
+			{"Sp. Atk", fmt.Sprintf("%d", ch.SpAtk())},
+			{"Sp. Def", fmt.Sprintf("%d", ch.SpDef())},
+			{"Speed", fmt.Sprintf("%d", ch.Spd())},
 		}
-
-		embedSmallImage := e.Member().EffectiveAvatarURL()
 
 		embed := discord.NewEmbedBuilder().
-			SetTitle(fmt.Sprintf("%v", ch)).
-			SetThumbnail(embedSmallImage).
-			SetImage("attachment://character.png").
-			SetFooterTextf("Displaying character %v \nID: %v", ch.IDX, ch.ID).
-			SetColor(constants.ColorDefault).
-			AddFields(
-				discord.EmbedField{
-					Name:  "Details",
-					Value: detailFieldContent,
-				},
-				discord.EmbedField{
-					Name:  "Stats",
-					Value: statFieldContent,
-				}).Build()
+			SetTitle(fmt.Sprintf("%s %s (Lvl %d)", ch.Data().Emoji, ch.CharacterName(), ch.Level)).
+			SetColor(int(ch.Color))
 
-		image, err := ch.Image()
-		if err != nil {
-			return e.CreateMessage(discord.MessageCreate{
-				Content: fmt.Sprintf("Error: %s", err),
-			})
+		for _, detail := range detailFieldValues {
+			embed.AddField(detail[0], detail[1], true)
+		}
+		if len(detailFieldValues)%2 != 0 {
+			embed.AddField("", "", true) // Add empty field for spacing
+		}
+		for _, stat := range statFieldValues {
+			embed.AddField(stat[0], stat[1], true)
 		}
 
-		return e.CreateMessage(discord.MessageCreate{
-			Embeds: []discord.Embed{embed},
-			Files:  []*discord.File{image},
-		})
+		messageCreate := discord.MessageCreate{Embeds: []discord.Embed{embed.Build()}}
+
+		if img, imgErr := ch.Image(); imgErr == nil {
+			embed.SetImage("attachment://" + img.Name) // Update image URL in embed
+			messageCreate.Files = []*discord.File{img}
+			messageCreate.Embeds = []discord.Embed{embed.Build()} // Rebuild embed with image
+		} else {
+			log.Warn("Failed to get image for info command",
+				logger.CharacterID(ch.ID),
+				logger.ErrorField(imgErr),
+			)
+		}
+
+		return e.CreateMessage(messageCreate)
+		// --- End of embed building ---
 	}
 }
 
 func handleGetCharacterAutocomplete(b *bot.Bot) handler.AutocompleteHandler {
+	log := logger.NewLogger("autocomplete.character") // Logger for autocomplete
+
 	return func(e *handler.AutocompleteEvent) error {
-		query := e.Data.String("character")
+		start := time.Now()
+		userID := e.User().ID
+		query := e.Data.String("character") // Assuming 'character' is the option name
+
+		log.Debug("Autocomplete request received",
+			logger.DiscordUserID(userID),
+			zap.String("query", query),
+		)
+
 		var results []discord.AutocompleteChoiceString
-		chars, err := b.DB.GetCharactersForUser(e.Ctx, e.Member().User.ID)
+		chars, err := b.DB.GetCharactersForUser(e.Ctx, userID)
 		if err != nil {
+			log.Error("Failed to get characters for autocomplete",
+				logger.DiscordUserID(userID),
+				logger.ErrorField(err),
+			)
+			// It's better to return an empty result or a generic error choice
+			// than to show "You dont have any characters" if there's a DB error.
 			return e.AutocompleteResult([]discord.AutocompleteChoice{
-				discord.AutocompleteChoiceString{
-					Name:  "You dont have any characters",
-					Value: "-1",
-				},
+				discord.AutocompleteChoiceString{Name: "Error fetching characters", Value: "error"},
+			})
+		}
+
+		if len(chars) == 0 {
+			log.Debug("User has no characters for autocomplete", logger.DiscordUserID(userID))
+			return e.AutocompleteResult([]discord.AutocompleteChoice{
+				discord.AutocompleteChoiceString{Name: "You don't have any characters", Value: "no_characters"},
 			})
 		}
 
 		for _, ch := range chars {
-			nameId := strings.ToLower(fmt.Sprintf("%v %v", ch.CharacterName(), ch.IDX))
-			if strings.Contains(nameId, query) {
+			// Improved matching: check nickname, character name, and IDX
+			displayName := ch.CharacterName()
+			if ch.Nickname != "" {
+				displayName = ch.Nickname
+			}
+
+			searchText := strings.ToLower(fmt.Sprintf("%s %s %d", displayName, ch.CharacterName(), ch.IDX))
+			queryLower := strings.ToLower(query)
+
+			if query == "" || strings.Contains(searchText, queryLower) {
+				choiceName := fmt.Sprintf("%d: %s (Lvl %d)", ch.IDX, displayName, ch.Level)
+				if ch.Shiny {
+					choiceName += " ✨"
+				}
 				results = append(results, discord.AutocompleteChoiceString{
-					Name:  fmt.Sprintf("%v - Level %v %v", ch.IDX, ch.Level, ch.CharacterName()),
-					Value: ch.ID.String(),
+					Name:  choiceName,
+					Value: ch.ID.String(), // Value should be the ID for selection
 				})
 			}
 		}
 
 		var choices []discord.AutocompleteChoice
 		for i, r := range results {
-			if i >= 25 {
+			if i >= 25 { // Discord limit for autocomplete choices
 				break
 			}
 			choices = append(choices, r)
 		}
 
+		if len(choices) == 0 && query != "" {
+			log.Debug("No matching characters found for autocomplete query",
+				logger.DiscordUserID(userID),
+				zap.String("query", query),
+			)
+			choices = append(choices, discord.AutocompleteChoiceString{
+				Name:  fmt.Sprintf("No characters found matching '%s'", query),
+				Value: "no_match",
+			})
+		}
+
+		log.Debug("Autocomplete results prepared",
+			logger.DiscordUserID(userID),
+			zap.Int("result_count", len(choices)),
+			logger.Duration(time.Since(start)),
+		)
 		return e.AutocompleteResult(choices)
 	}
 }
