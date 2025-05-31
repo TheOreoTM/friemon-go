@@ -1,62 +1,45 @@
-# ---- Builder Stage ----
-# Use a specific version of the golang-alpine image for reproducibility
 FROM golang:1.23-alpine AS builder
 
-# Set necessary environment variables for the build
-ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=amd64
-ENV ASSETS_DIR=/app/assets
-
-# Install git, which is required to fetch dependencies
+# Install git
 RUN apk add --no-cache git
 
-# Set the working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Copy go module files and download dependencies.
-# This is done in a separate layer to leverage Docker's layer caching,
-# which speeds up builds when dependencies haven't changed.
+# Copy go mod files
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the entire source code into the container
+# Copy source code
 COPY . .
 
-# Build the application, creating a static binary.
-# Build arguments can be passed to embed version info into the binary.
+# Build for the target platform (let Docker handle architecture)
 ARG COMMIT=unknown
 ARG BRANCH=unknown
-RUN go build -ldflags="-X main.commit=${COMMIT} -X main.branch=${BRANCH}" -o /friemon ./cmd/friemon/main.go
+RUN go build \
+    -ldflags="-X main.commit=${COMMIT} -X main.branch=${BRANCH}" \
+    -o friemon \
+    ./cmd/friemon/main.go
 
-# Make sure the binary is executable
-RUN chmod +x /friemon
-
-# ---- Final Stage ----
-# Use a specific version of the alpine image for a small and secure base
+# Runtime stage
 FROM alpine:3.20
 
-# Create a non-root user and group for security purposes
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
-# Set the working directory for the final image
+RUN apk --no-cache add ca-certificates
 WORKDIR /app
 
-# Copy the built binary and the example config file from the builder stage
-COPY --from=builder /friemon /app/friemon
-COPY config.example.toml /app/config.toml
-# Copy the assets directory
-COPY ./assets /app/assets
+# Copy binary
+COPY --from=builder /app/friemon .
+COPY config.example.toml config.toml
+COPY ./assets ./assets
 
-# Assign ownership of the application files to the non-root user
-RUN chown -R appuser:appgroup /app
+# Make executable
+RUN chmod +x friemon
 
-# Switch to the non-root user
+# Create user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup && \
+    chown -R appuser:appgroup /app
+
 USER appuser
 
-# Healthcheck to ensure the bot process is running
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD pgrep -x friemon || exit 1
-
-# Command to run the application when the container starts
 CMD ["./friemon"]
