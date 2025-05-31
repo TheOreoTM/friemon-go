@@ -45,7 +45,6 @@ func claimCharacterButton(b *bot.Bot) handler.ComponentHandler {
 			return nil
 		}
 
-		characterToClaim.OwnerID = e.Member().User.ID.String()
 		b.Cache.DeleteChannelCharacter(e.Channel().ID())
 
 		button, exists := e.Message.ButtonByID("/claim")
