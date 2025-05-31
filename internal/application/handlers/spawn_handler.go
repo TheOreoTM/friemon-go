@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -55,11 +56,6 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 			Build(),
 	)
 
-	b.Scheduler.After(time.Second*3).
-		With("message_id", message.ID.String()).
-		With("channel_id", e.ChannelID.String()).
-		Emit("disable_spawn_button")
-
 	if err != nil {
 		slog.Error("Failed to send spawn message",
 			slog.String("channel_id", e.ChannelID.String()),
@@ -69,6 +65,17 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 
 		return
 	}
+
+	id, err := b.Scheduler.After(time.Second*10).
+		With("message_id", message.ID.String()).
+		With("channel_id", e.ChannelID.String()).
+		Emit("disable_spawn_button")
+	if err != nil {
+		slog.Error("Failed to schedule disable_spawn_button task", slog.Any("err", err))
+		return
+	}
+
+	fmt.Print(id)
 
 	err = b.Cache.SetChannelCharacter(e.ChannelID, randomCharacter)
 	if err != nil {
