@@ -59,13 +59,6 @@ func main() {
 		zap.Bool("dev", dev),
 	)
 
-	// Check if config file exists
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Warn("Config file not found, using environment variables and defaults",
-			zap.String("config_path", configPath),
-		)
-	}
-
 	// Create build info
 	buildInfo := bot.BuildInfo{
 		Version: cfg.Bot.Version,
