@@ -15,7 +15,7 @@ import (
 var claimMutex sync.Mutex
 
 func init() {
-	Components["claim_character"] = claimCharacterButton
+	Components["/claim"] = claimCharacterButton
 }
 
 func claimCharacterButton(b *bot.Bot) handler.ComponentHandler {
