@@ -139,7 +139,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 
 	components := []discord.ContainerComponent{
 		discord.NewActionRow(
-			discord.NewPrimaryButton("Claim", "claim_character"),
+			discord.NewPrimaryButton("Claim", "claim"),
 		),
 	}
 
