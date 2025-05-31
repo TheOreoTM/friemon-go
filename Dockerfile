@@ -29,6 +29,9 @@ ARG COMMIT=unknown
 ARG BRANCH=unknown
 RUN go build -ldflags="-X main.commit=${COMMIT} -X main.branch=${BRANCH}" -o /friemon ./cmd/friemon/main.go
 
+# Make sure the binary is executable
+RUN chmod +x /friemon
+
 # ---- Final Stage ----
 # Use a specific version of the alpine image for a small and secure base
 FROM alpine:3.20
