@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
@@ -46,13 +47,18 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 		spawnEmbed.SetImage("attachment://character.png")
 	}
 
-	_, err = e.Client().Rest().CreateMessage(e.ChannelID,
+	message, err := e.Client().Rest().CreateMessage(e.ChannelID,
 		discord.NewMessageCreateBuilder().
 			AddEmbeds(spawnEmbed.Build()).
 			AddFiles(spawnImage).
 			AddActionRow(discord.NewPrimaryButton("Invite to party", "/claim")).
 			Build(),
 	)
+
+	b.Scheduler.After(time.Second*3).
+		With("message_id", message.ID.String()).
+		With("channel_id", e.ChannelID.String()).
+		Emit("disable_spawn_button")
 
 	if err != nil {
 		slog.Error("Failed to send spawn message",

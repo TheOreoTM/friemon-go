@@ -150,10 +150,6 @@ func (b *Bot) Close(ctx context.Context) error {
 		return fmt.Errorf("error closing pgx connection: %w", err)
 	}
 
-	if err := b.Scheduler.Stop(); err != nil {
-		return fmt.Errorf("error stopping scheduler: %w", err)
-	}
-
 	return nil
 }
 
