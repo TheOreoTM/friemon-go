@@ -2,7 +2,6 @@ package bot
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -10,70 +9,55 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/theoreotm/friemon/internal/infrastructure/db"
+	"github.com/theoreotm/friemon/internal/pkg/logger"
 )
 
 func LoadConfig(path string) (*Config, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open config: %w", err)
-	}
-
 	var cfg Config
-	if err = toml.NewDecoder(file).Decode(&cfg); err != nil {
-		return nil, err
+
+	if _, err := os.Stat(path); err == nil {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+
+		if err := toml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config file: %w", err)
+		}
 	}
 
-	// Override with environment variables if set
 	cfg.overrideWithEnv()
 
 	return &cfg, nil
 }
 
 func (c *Config) overrideWithEnv() {
+	// Bot config
+	if token := os.Getenv("BOT_TOKEN"); token != "" {
+		c.Bot.Token = token
+	}
+	if devMode := os.Getenv("DEV_MODE"); devMode != "" {
+		c.Bot.DevMode = strings.ToLower(devMode) == "true"
+	}
+	if syncCommands := os.Getenv("SYNC_COMMANDS"); syncCommands != "" {
+		c.Bot.SyncCommands = strings.ToLower(syncCommands) == "true"
+	}
+	if devGuilds := os.Getenv("DEV_GUILDS"); devGuilds != "" {
+		c.Bot.DevGuilds = stringsToSnowflakeIDs(devGuilds)
+	}
+
 	// Log config
 	if level := os.Getenv("LOG_LEVEL"); level != "" {
-		var l slog.Level
-		switch level {
-		case "debug":
-			l = slog.LevelDebug
-		case "info":
-			l = slog.LevelInfo
-		case "warn":
-			l = slog.LevelWarn
-		case "error":
-			l = slog.LevelError
-		}
-		c.Log.Level = l
+		c.Log.Level = level
 	}
 	if format := os.Getenv("LOG_FORMAT"); format != "" {
 		c.Log.Format = format
 	}
 	if addSource := os.Getenv("LOG_ADD_SOURCE"); addSource != "" {
-		c.Log.AddSource, _ = strconv.ParseBool(addSource)
+		c.Log.AddSource = strings.ToLower(addSource) == "true"
 	}
-
-	if timezone := os.Getenv("TZ"); timezone != "" {
-		c.Timezone = timezone
-	}
-	if assetsDir := os.Getenv("ASSETS_DIR"); assetsDir != "" {
-		c.AssetsDir = assetsDir
-	}
-
-	// Bot config
-	if token := os.Getenv("BOT_TOKEN"); token != "" {
-		c.Bot.Token = token
-	}
-	if syncCommands := os.Getenv("BOT_SYNC_COMMANDS"); syncCommands != "" {
-		c.Bot.SyncCommands, _ = strconv.ParseBool(syncCommands)
-	}
-	if devMode := os.Getenv("BOT_DEV_MODE"); devMode != "" {
-		c.Bot.DevMode, _ = strconv.ParseBool(devMode)
-	}
-	if version := os.Getenv("BOT_VERSION"); version != "" {
-		c.Bot.Version = version
-	}
-	if devGuilds := os.Getenv("BOT_DEV_GUILDS"); devGuilds != "" {
-		c.Bot.DevGuilds = stringsToSnowflakeIDs(devGuilds)
+	if outputPath := os.Getenv("LOG_OUTPUT_PATH"); outputPath != "" {
+		c.Log.OutputPath = outputPath
 	}
 
 	// Database config
@@ -81,7 +65,9 @@ func (c *Config) overrideWithEnv() {
 		c.Database.Host = host
 	}
 	if port := os.Getenv("DB_PORT"); port != "" {
-		c.Database.Port, _ = strconv.Atoi(port)
+		if p, err := strconv.Atoi(port); err == nil {
+			c.Database.Port = p
+		}
 	}
 	if user := os.Getenv("DB_USER"); user != "" {
 		c.Database.Username = user
@@ -104,17 +90,19 @@ func (c *Config) overrideWithEnv() {
 		c.Redis.Password = password
 	}
 	if db := os.Getenv("REDIS_DB"); db != "" {
-		c.Redis.DB, _ = strconv.Atoi(db)
+		if d, err := strconv.Atoi(db); err == nil {
+			c.Redis.DB = d
+		}
 	}
 }
 
 type Config struct {
-	Timezone  string      `toml:"timezone"`
-	AssetsDir string      `toml:"assets_dir"`
-	Log       LogConfig   `toml:"log"`
-	Bot       BotConfig   `toml:"bot"`
-	Database  db.Config   `toml:"database"`
-	Redis     RedisConfig `toml:"redis"`
+	Timezone  string        `toml:"timezone"`
+	AssetsDir string        `toml:"assets_dir"`
+	Log       logger.Config `toml:"log"`
+	Bot       BotConfig     `toml:"bot"`
+	Database  db.Config     `toml:"database"`
+	Redis     RedisConfig   `toml:"redis"`
 }
 
 type BotConfig struct {
@@ -125,12 +113,6 @@ type BotConfig struct {
 	Version      string         `toml:"version"`
 }
 
-type LogConfig struct {
-	Level     slog.Level `toml:"level"`
-	Format    string     `toml:"format"`
-	AddSource bool       `toml:"add_source"`
-}
-
 type RedisConfig struct {
 	Addr     string `toml:"addr"`
 	Password string `toml:"password"`
@@ -138,22 +120,13 @@ type RedisConfig struct {
 }
 
 func stringsToSnowflakeIDs(ids string) []snowflake.ID {
-	ids = strings.TrimSpace(ids)
-	if ids == "" {
-		return nil
-	}
 	var snowflakeIDs []snowflake.ID
 	for _, id := range strings.Split(ids, ",") {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
+		if trimmed := strings.TrimSpace(id); trimmed != "" {
+			if snowflakeID, err := snowflake.Parse(trimmed); err == nil {
+				snowflakeIDs = append(snowflakeIDs, snowflakeID)
+			}
 		}
-		snowflakeID, err := snowflake.Parse(id)
-		if err != nil {
-			slog.Error("Failed to parse snowflake ID", slog.String("id", id), slog.Any("err", err))
-			continue
-		}
-		snowflakeIDs = append(snowflakeIDs, snowflakeID)
 	}
 	return snowflakeIDs
 }

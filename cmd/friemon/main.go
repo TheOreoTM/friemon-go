@@ -4,19 +4,19 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	disgobot "github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/application/commands"
 	"github.com/theoreotm/friemon/internal/application/components"
 	"github.com/theoreotm/friemon/internal/application/handlers"
+	"github.com/theoreotm/friemon/internal/pkg/logger"
+	"go.uber.org/zap"
 )
 
 var (
@@ -26,138 +26,124 @@ var (
 )
 
 func main() {
-	// Set up initial basic logging
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})))
-
-	shouldNuke := flag.Bool("nuke", false, "Whether to nuke the database")
-	path := flag.String("config", "config.toml", "path to config")
-	flag.StringVar(&commit, "commit", "unknown", "commit")
-	flag.StringVar(&branch, "branch", "unknown", "branch")
+	// Parse command line flags
+	var configPath string
+	flag.StringVar(&configPath, "config", "config.toml", "Path to configuration file")
 	flag.Parse()
 
-	// Log the working directory and config path
-	wd, _ := os.Getwd()
-	slog.Info("Current working directory", "path", wd)
-	slog.Info("Loading config from", "path", *path)
-
-	// Check if config file exists
-	if _, err := os.Stat(*path); os.IsNotExist(err) {
-		slog.Error("Config file does not exist", "path", *path)
-		os.Exit(-1)
-	}
-
-	cfg, err := bot.LoadConfig(*path)
+	// Load configuration
+	cfg, err := bot.LoadConfig(configPath)
 	if err != nil {
-		slog.Error("Failed to read config", slog.Any("err", err))
-		os.Exit(-1)
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
-	setupLogger(cfg.Log)
-	dev = cfg.Bot.DevMode
-	shouldSyncCommands := cfg.Bot.SyncCommands
+	// Initialize logging
+	if err := logger.Initialize(cfg.Log); err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
 
-	// Log environment variables
-	slog.Debug("Environment variables",
-		"BOT_TOKEN", os.Getenv("BOT_TOKEN") != "",
-		"DB_HOST", os.Getenv("DB_HOST"),
-		"DB_USER", os.Getenv("DB_USER"),
-		"REDIS_ADDR", os.Getenv("REDIS_ADDR"),
+	// Ensure we sync logs before exiting
+	defer func() {
+		if err := logger.Sync(); err != nil {
+			fmt.Printf("Failed to sync logger: %v\n", err)
+		}
+	}()
+
+	// Get a logger for main
+	log := logger.NewLogger("main")
+
+	log.Info("Starting Friemon Bot",
+		logger.Component("main"),
+		zap.String("commit", commit),
+		zap.String("branch", branch),
+		zap.Bool("dev", dev),
 	)
 
-	slog.Info("Starting friemon...", slog.String("version", cfg.Bot.Version), slog.String("commit", commit), slog.String("branch", branch))
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		log.Warn("Config file not found, using environment variables and defaults",
+			zap.String("config_path", configPath),
+		)
+	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
+	// Create build info
 	buildInfo := bot.BuildInfo{
 		Version: cfg.Bot.Version,
 		Commit:  commit,
 		Branch:  branch,
 	}
+
+	// Create context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Create bot instance
 	b := bot.New(*cfg, buildInfo, ctx)
-	h := handler.New()
 
+	// Prepare command list
+	var cmds []discord.ApplicationCommandCreate
 	for _, cmd := range commands.Commands {
-		slog.Debug("Registering command", slog.String("command", cmd.Cmd.CommandName()))
-		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
+		cmds = append(cmds, cmd.Cmd)
+	}
 
+	// Setup bot with event listeners
+	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
+		log.Fatal("Failed to setup bot", logger.ErrorField(err))
+	}
+
+	// Setup command and component handlers
+	h := handler.New()
+	for _, cmd := range commands.Commands {
+		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
 		if cmd.Autocomplete != nil {
 			h.Autocomplete(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Autocomplete(b))
 		}
 	}
 
-	for key, comp := range components.Components {
-		h.Component(key, comp(b))
+	for name, comp := range components.Components {
+		h.Component(name, comp(b))
 	}
 
-	if err = b.SetupBot(h, disgobot.NewListenerFunc(b.OnReady), handlers.OnMessage(b)); err != nil {
-		slog.Error("Failed to setup bot", slog.Any("err", err))
-		os.Exit(-1)
+	b.Client.AddEventListeners(h)
+
+	// Connect to Discord
+	if err := b.Client.OpenGateway(ctx); err != nil {
+		log.Fatal("Failed to connect to Discord", logger.ErrorField(err))
 	}
 
-	defer func() {
-		cancel()
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer shutdownCancel()
+	log.Info("Bot connected successfully", logger.Component("main"))
 
-		if err := b.Close(shutdownCtx); err != nil {
-			slog.Error("Failed to close friemon", slog.Any("err", err))
-		}
-	}()
-
-	if shouldSyncCommands {
-		var cmds []discord.ApplicationCommandCreate
-		for _, cmd := range commands.Commands {
-			cmds = append(cmds, cmd.Cmd)
-		}
-
-		slog.Info("Syncing commands", slog.Any("guild_ids", cfg.Bot.DevGuilds))
-		if err = handler.SyncCommands(b.Client, cmds, cfg.Bot.DevGuilds); err != nil {
-			slog.Error("Failed to sync commands", slog.Any("err", err))
+	// Sync commands if enabled
+	if cfg.Bot.SyncCommands {
+		log.Info("Syncing commands...", logger.Component("main"))
+		if _, err := b.Client.Rest().SetGlobalCommands(b.Client.ApplicationID(), cmds); err != nil {
+			log.Error("Failed to sync commands", logger.ErrorField(err))
+		} else {
+			log.Info("Commands synced successfully",
+				logger.Component("main"),
+				zap.Int("command_count", len(cmds)),
+			)
 		}
 	}
 
-	if *shouldNuke {
-		slog.Info("Nuking database")
-		if err = b.DB.DeleteEverything(ctx); err != nil {
-			slog.Error("Failed to nuke database", slog.Any("err", err))
-		}
-	}
-
-	if err = b.Client.OpenGateway(ctx); err != nil {
-		slog.Error("Failed to open gateway", slog.Any("err", err))
-		os.Exit(-1)
-	}
-
-	slog.Info("Bot is running. Press CTRL-C to exit.")
+	// Wait for interrupt signal
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM)
+
+	log.Info("Bot is now running. Press CTRL+C to exit.", logger.Component("main"))
 	<-s
-	slog.Info("Shutting down bot...")
-}
 
-func setupLogger(cfg bot.LogConfig) {
-	level := cfg.Level
-	if dev {
-		level = slog.LevelDebug
+	log.Info("Shutting down...", logger.Component("main"))
+
+	// Graceful shutdown with timeout
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := b.Close(shutdownCtx); err != nil {
+		log.Error("Error during shutdown", logger.ErrorField(err))
 	}
 
-	opts := &slog.HandlerOptions{
-		AddSource: cfg.AddSource,
-		Level:     level,
-	}
-
-	var sHandler slog.Handler
-	switch cfg.Format {
-	case "json":
-		sHandler = slog.NewJSONHandler(os.Stdout, opts)
-	case "text":
-		sHandler = slog.NewTextHandler(os.Stdout, opts)
-	default:
-		slog.Error("Unknown log format", slog.String("format", cfg.Format))
-		os.Exit(-1)
-	}
-	slog.SetDefault(slog.New(sHandler))
+	log.Info("Bot shutdown complete", logger.Component("main"))
 }
