@@ -28,7 +28,8 @@ func LoadConfig() (*Config, error) {
 			DevMode:      getEnvBool("DEV_MODE", false),
 			SyncCommands: getEnvBool("SYNC_COMMANDS", true),
 			Version:      getEnvWithDefault("BOT_VERSION", "1.0.0"),
-			DevGuilds:    parseDevGuilds(os.Getenv("DEV_GUILDS")),
+			DevGuilds:    parseSnowflakes(os.Getenv("DEV_GUILDS")),
+			AdminUsers:   parseSnowflakes(os.Getenv("ADMIN_USERS")),
 		},
 		Database: db.Config{
 			Host:     getEnvWithDefault("DB_HOST", "localhost"),
@@ -66,6 +67,7 @@ type Config struct {
 // BotConfig holds Discord bot specific configuration
 type BotConfig struct {
 	DevGuilds    []snowflake.ID
+	AdminUsers   []snowflake.ID
 	Token        string
 	SyncCommands bool
 	DevMode      bool
@@ -146,25 +148,25 @@ func getEnvBool(key string, defaultValue bool) bool {
 	return defaultValue
 }
 
-// parseDevGuilds parses comma-separated guild IDs
-func parseDevGuilds(guildsStr string) []snowflake.ID {
-	if guildsStr == "" {
+// parseSnowflakes parses comma-separated snowflake IDs
+func parseSnowflakes(snowflakeStr string) []snowflake.ID {
+	if snowflakeStr == "" {
 		return nil
 	}
 
-	var guilds []snowflake.ID
-	for _, idStr := range strings.Split(guildsStr, ",") {
+	var snowflakes []snowflake.ID
+	for _, idStr := range strings.Split(snowflakeStr, ",") {
 		idStr = strings.TrimSpace(idStr)
 		if idStr == "" {
 			continue
 		}
 
 		if id, err := snowflake.Parse(idStr); err == nil {
-			guilds = append(guilds, id)
+			snowflakes = append(snowflakes, id)
 		}
 	}
 
-	return guilds
+	return snowflakes
 }
 
 // contains checks if a slice contains a string
