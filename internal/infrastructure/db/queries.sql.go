@@ -13,6 +13,150 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createBattle = `-- name: createBattle :one
+INSERT INTO battles (id, challenger_id, opponent_id, status, battle_settings, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, challenger_id, opponent_id, winner_id, status, turn_count, current_turn_player, main_thread_id, challenger_thread_id, opponent_thread_id, battle_settings, created_at, updated_at, completed_at
+`
+
+type createBattleParams struct {
+	ID             uuid.UUID `json:"id"`
+	ChallengerID   string    `json:"challenger_id"`
+	OpponentID     string    `json:"opponent_id"`
+	Status         string    `json:"status"`
+	BattleSettings []byte    `json:"battle_settings"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// Battle queries
+func (q *Queries) createBattle(ctx context.Context, arg createBattleParams) (Battle, error) {
+	row := q.db.QueryRow(ctx, createBattle,
+		arg.ID,
+		arg.ChallengerID,
+		arg.OpponentID,
+		arg.Status,
+		arg.BattleSettings,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i Battle
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengerID,
+		&i.OpponentID,
+		&i.WinnerID,
+		&i.Status,
+		&i.TurnCount,
+		&i.CurrentTurnPlayer,
+		&i.MainThreadID,
+		&i.ChallengerThreadID,
+		&i.OpponentThreadID,
+		&i.BattleSettings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const createBattleTeamMember = `-- name: createBattleTeamMember :one
+INSERT INTO battle_teams (id, battle_id, user_id, team_position, character_id, character_data, current_hp, status_effects, stat_stages, is_active, is_fainted, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, battle_id, user_id, team_position, character_id, character_data, current_hp, status_effects, stat_stages, is_active, is_fainted, created_at
+`
+
+type createBattleTeamMemberParams struct {
+	ID            uuid.UUID `json:"id"`
+	BattleID      uuid.UUID `json:"battle_id"`
+	UserID        string    `json:"user_id"`
+	TeamPosition  int32     `json:"team_position"`
+	CharacterID   uuid.UUID `json:"character_id"`
+	CharacterData []byte    `json:"character_data"`
+	CurrentHp     int32     `json:"current_hp"`
+	StatusEffects []string  `json:"status_effects"`
+	StatStages    []byte    `json:"stat_stages"`
+	IsActive      bool      `json:"is_active"`
+	IsFainted     bool      `json:"is_fainted"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// Battle Team queries
+func (q *Queries) createBattleTeamMember(ctx context.Context, arg createBattleTeamMemberParams) (BattleTeam, error) {
+	row := q.db.QueryRow(ctx, createBattleTeamMember,
+		arg.ID,
+		arg.BattleID,
+		arg.UserID,
+		arg.TeamPosition,
+		arg.CharacterID,
+		arg.CharacterData,
+		arg.CurrentHp,
+		arg.StatusEffects,
+		arg.StatStages,
+		arg.IsActive,
+		arg.IsFainted,
+		arg.CreatedAt,
+	)
+	var i BattleTeam
+	err := row.Scan(
+		&i.ID,
+		&i.BattleID,
+		&i.UserID,
+		&i.TeamPosition,
+		&i.CharacterID,
+		&i.CharacterData,
+		&i.CurrentHp,
+		&i.StatusEffects,
+		&i.StatStages,
+		&i.IsActive,
+		&i.IsFainted,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createBattleTurn = `-- name: createBattleTurn :one
+INSERT INTO battle_turns (id, battle_id, turn_number, user_id, action_type, action_data, result_data, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, battle_id, turn_number, user_id, action_type, action_data, result_data, created_at
+`
+
+type createBattleTurnParams struct {
+	ID         uuid.UUID `json:"id"`
+	BattleID   uuid.UUID `json:"battle_id"`
+	TurnNumber int32     `json:"turn_number"`
+	UserID     string    `json:"user_id"`
+	ActionType string    `json:"action_type"`
+	ActionData []byte    `json:"action_data"`
+	ResultData []byte    `json:"result_data"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+func (q *Queries) createBattleTurn(ctx context.Context, arg createBattleTurnParams) (BattleTurn, error) {
+	row := q.db.QueryRow(ctx, createBattleTurn,
+		arg.ID,
+		arg.BattleID,
+		arg.TurnNumber,
+		arg.UserID,
+		arg.ActionType,
+		arg.ActionData,
+		arg.ResultData,
+		arg.CreatedAt,
+	)
+	var i BattleTurn
+	err := row.Scan(
+		&i.ID,
+		&i.BattleID,
+		&i.TurnNumber,
+		&i.UserID,
+		&i.ActionType,
+		&i.ActionData,
+		&i.ResultData,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createCharacter = `-- name: createCharacter :one
 INSERT INTO characters (id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color)
 VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
@@ -92,6 +236,20 @@ func (q *Queries) createCharacter(ctx context.Context, arg createCharacterParams
 	return i, err
 }
 
+const createGameSetting = `-- name: createGameSetting :exec
+INSERT INTO game_settings (setting_key, setting_value) VALUES ($1, $2)
+`
+
+type createGameSettingParams struct {
+	SettingKey   string `json:"setting_key"`
+	SettingValue string `json:"setting_value"`
+}
+
+func (q *Queries) createGameSetting(ctx context.Context, arg createGameSettingParams) error {
+	_, err := q.db.Exec(ctx, createGameSetting, arg.SettingKey, arg.SettingValue)
+	return err
+}
+
 const createUser = `-- name: createUser :one
 INSERT INTO users (id) VALUES ($1) RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx
 `
@@ -107,6 +265,48 @@ func (q *Queries) createUser(ctx context.Context, id string) (User, error) {
 		&i.OrderDesc,
 		&i.ShiniesCaught,
 		&i.NextIdx,
+	)
+	return i, err
+}
+
+const createUserElo = `-- name: createUserElo :one
+INSERT INTO user_elo (user_id, elo_rating, battles_won, battles_lost, battles_total, highest_elo, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING user_id, elo_rating, battles_won, battles_lost, battles_total, highest_elo, created_at, updated_at
+`
+
+type createUserEloParams struct {
+	UserID       string    `json:"user_id"`
+	EloRating    int32     `json:"elo_rating"`
+	BattlesWon   int32     `json:"battles_won"`
+	BattlesLost  int32     `json:"battles_lost"`
+	BattlesTotal int32     `json:"battles_total"`
+	HighestElo   int32     `json:"highest_elo"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (q *Queries) createUserElo(ctx context.Context, arg createUserEloParams) (UserElo, error) {
+	row := q.db.QueryRow(ctx, createUserElo,
+		arg.UserID,
+		arg.EloRating,
+		arg.BattlesWon,
+		arg.BattlesLost,
+		arg.BattlesTotal,
+		arg.HighestElo,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i UserElo
+	err := row.Scan(
+		&i.UserID,
+		&i.EloRating,
+		&i.BattlesWon,
+		&i.BattlesLost,
+		&i.BattlesTotal,
+		&i.HighestElo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -136,6 +336,240 @@ DELETE FROM users
 func (q *Queries) deleteUsers(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, deleteUsers)
 	return err
+}
+
+const getActiveBattleForUser = `-- name: getActiveBattleForUser :one
+SELECT id, challenger_id, opponent_id, winner_id, status, turn_count, current_turn_player, main_thread_id, challenger_thread_id, opponent_thread_id, battle_settings, created_at, updated_at, completed_at
+FROM battles 
+WHERE (challenger_id = $1 OR opponent_id = $1) AND status IN ('pending', 'active')
+ORDER BY created_at DESC LIMIT 1
+`
+
+func (q *Queries) getActiveBattleForUser(ctx context.Context, challengerID string) (Battle, error) {
+	row := q.db.QueryRow(ctx, getActiveBattleForUser, challengerID)
+	var i Battle
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengerID,
+		&i.OpponentID,
+		&i.WinnerID,
+		&i.Status,
+		&i.TurnCount,
+		&i.CurrentTurnPlayer,
+		&i.MainThreadID,
+		&i.ChallengerThreadID,
+		&i.OpponentThreadID,
+		&i.BattleSettings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const getAllGameSettings = `-- name: getAllGameSettings :many
+SELECT setting_key, setting_value FROM game_settings
+`
+
+type getAllGameSettingsRow struct {
+	SettingKey   string `json:"setting_key"`
+	SettingValue string `json:"setting_value"`
+}
+
+func (q *Queries) getAllGameSettings(ctx context.Context) ([]getAllGameSettingsRow, error) {
+	rows, err := q.db.Query(ctx, getAllGameSettings)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []getAllGameSettingsRow
+	for rows.Next() {
+		var i getAllGameSettingsRow
+		if err := rows.Scan(&i.SettingKey, &i.SettingValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBattle = `-- name: getBattle :one
+SELECT id, challenger_id, opponent_id, winner_id, status, turn_count, current_turn_player, main_thread_id, challenger_thread_id, opponent_thread_id, battle_settings, created_at, updated_at, completed_at
+FROM battles WHERE id = $1
+`
+
+func (q *Queries) getBattle(ctx context.Context, id uuid.UUID) (Battle, error) {
+	row := q.db.QueryRow(ctx, getBattle, id)
+	var i Battle
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengerID,
+		&i.OpponentID,
+		&i.WinnerID,
+		&i.Status,
+		&i.TurnCount,
+		&i.CurrentTurnPlayer,
+		&i.MainThreadID,
+		&i.ChallengerThreadID,
+		&i.OpponentThreadID,
+		&i.BattleSettings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const getBattleTeam = `-- name: getBattleTeam :many
+SELECT id, battle_id, user_id, team_position, character_id, character_data, current_hp, status_effects, stat_stages, is_active, is_fainted, created_at
+FROM battle_teams 
+WHERE battle_id = $1 AND user_id = $2
+ORDER BY team_position
+`
+
+type getBattleTeamParams struct {
+	BattleID uuid.UUID `json:"battle_id"`
+	UserID   string    `json:"user_id"`
+}
+
+func (q *Queries) getBattleTeam(ctx context.Context, arg getBattleTeamParams) ([]BattleTeam, error) {
+	rows, err := q.db.Query(ctx, getBattleTeam, arg.BattleID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BattleTeam
+	for rows.Next() {
+		var i BattleTeam
+		if err := rows.Scan(
+			&i.ID,
+			&i.BattleID,
+			&i.UserID,
+			&i.TeamPosition,
+			&i.CharacterID,
+			&i.CharacterData,
+			&i.CurrentHp,
+			&i.StatusEffects,
+			&i.StatStages,
+			&i.IsActive,
+			&i.IsFainted,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBattleTeamMember = `-- name: getBattleTeamMember :one
+SELECT id, battle_id, user_id, team_position, character_id, character_data, current_hp, status_effects, stat_stages, is_active, is_fainted, created_at
+FROM battle_teams 
+WHERE id = $1
+`
+
+func (q *Queries) getBattleTeamMember(ctx context.Context, id uuid.UUID) (BattleTeam, error) {
+	row := q.db.QueryRow(ctx, getBattleTeamMember, id)
+	var i BattleTeam
+	err := row.Scan(
+		&i.ID,
+		&i.BattleID,
+		&i.UserID,
+		&i.TeamPosition,
+		&i.CharacterID,
+		&i.CharacterData,
+		&i.CurrentHp,
+		&i.StatusEffects,
+		&i.StatStages,
+		&i.IsActive,
+		&i.IsFainted,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getBattleTurns = `-- name: getBattleTurns :many
+SELECT id, battle_id, turn_number, user_id, action_type, action_data, result_data, created_at
+FROM battle_turns 
+WHERE battle_id = $1
+ORDER BY turn_number, created_at
+`
+
+func (q *Queries) getBattleTurns(ctx context.Context, battleID uuid.UUID) ([]BattleTurn, error) {
+	rows, err := q.db.Query(ctx, getBattleTurns, battleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BattleTurn
+	for rows.Next() {
+		var i BattleTurn
+		if err := rows.Scan(
+			&i.ID,
+			&i.BattleID,
+			&i.TurnNumber,
+			&i.UserID,
+			&i.ActionType,
+			&i.ActionData,
+			&i.ResultData,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBattlesByStatus = `-- name: getBattlesByStatus :many
+SELECT id, challenger_id, opponent_id, winner_id, status, turn_count, current_turn_player, main_thread_id, challenger_thread_id, opponent_thread_id, battle_settings, created_at, updated_at, completed_at
+FROM battles 
+WHERE status = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) getBattlesByStatus(ctx context.Context, status string) ([]Battle, error) {
+	rows, err := q.db.Query(ctx, getBattlesByStatus, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Battle
+	for rows.Next() {
+		var i Battle
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChallengerID,
+			&i.OpponentID,
+			&i.WinnerID,
+			&i.Status,
+			&i.TurnCount,
+			&i.CurrentTurnPlayer,
+			&i.MainThreadID,
+			&i.ChallengerThreadID,
+			&i.OpponentThreadID,
+			&i.BattleSettings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getCharacter = `-- name: getCharacter :one
@@ -371,6 +805,49 @@ func (q *Queries) getCharactersWithOwnerInfo(ctx context.Context, ownerID string
 	return items, nil
 }
 
+const getEloLeaderboard = `-- name: getEloLeaderboard :many
+SELECT user_id, elo_rating, battles_won, battles_lost, battles_total, highest_elo, created_at, updated_at
+FROM user_elo 
+WHERE battles_total >= $1
+ORDER BY elo_rating DESC
+LIMIT $2 OFFSET $3
+`
+
+type getEloLeaderboardParams struct {
+	BattlesTotal int32 `json:"battles_total"`
+	Limit        int32 `json:"limit"`
+	Offset       int32 `json:"offset"`
+}
+
+func (q *Queries) getEloLeaderboard(ctx context.Context, arg getEloLeaderboardParams) ([]UserElo, error) {
+	rows, err := q.db.Query(ctx, getEloLeaderboard, arg.BattlesTotal, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserElo
+	for rows.Next() {
+		var i UserElo
+		if err := rows.Scan(
+			&i.UserID,
+			&i.EloRating,
+			&i.BattlesWon,
+			&i.BattlesLost,
+			&i.BattlesTotal,
+			&i.HighestElo,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFavouriteCharactersForUser = `-- name: getFavouriteCharactersForUser :many
 SELECT 
     c.id, c.owner_id, c.claimed_timestamp, c.idx, c.character_id, c.level, c.xp, c.personality, c.shiny, c.iv_hp, c.iv_atk, c.iv_def, c.iv_sp_atk, c.iv_sp_def, c.iv_spd, c.iv_total, c.nickname, c.favourite, c.held_item, c.moves, c.color,
@@ -447,6 +924,41 @@ func (q *Queries) getFavouriteCharactersForUser(ctx context.Context, ownerID str
 		return nil, err
 	}
 	return items, nil
+}
+
+const getGameSetting = `-- name: getGameSetting :one
+SELECT setting_value FROM game_settings WHERE setting_key = $1
+`
+
+func (q *Queries) getGameSetting(ctx context.Context, settingKey string) (string, error) {
+	row := q.db.QueryRow(ctx, getGameSetting, settingKey)
+	var setting_value string
+	err := row.Scan(&setting_value)
+	return setting_value, err
+}
+
+const getLastBattleTurn = `-- name: getLastBattleTurn :one
+SELECT id, battle_id, turn_number, user_id, action_type, action_data, result_data, created_at
+FROM battle_turns 
+WHERE battle_id = $1
+ORDER BY turn_number DESC, created_at DESC
+LIMIT 1
+`
+
+func (q *Queries) getLastBattleTurn(ctx context.Context, battleID uuid.UUID) (BattleTurn, error) {
+	row := q.db.QueryRow(ctx, getLastBattleTurn, battleID)
+	var i BattleTurn
+	err := row.Scan(
+		&i.ID,
+		&i.BattleID,
+		&i.TurnNumber,
+		&i.UserID,
+		&i.ActionType,
+		&i.ActionData,
+		&i.ResultData,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getSelectedCharacter = `-- name: getSelectedCharacter :one
@@ -665,6 +1177,99 @@ func (q *Queries) getUser(ctx context.Context, id string) (User, error) {
 		&i.NextIdx,
 	)
 	return i, err
+}
+
+const getUserBattleHistory = `-- name: getUserBattleHistory :many
+SELECT id, challenger_id, opponent_id, winner_id, status, turn_count, current_turn_player, main_thread_id, challenger_thread_id, opponent_thread_id, battle_settings, created_at, updated_at, completed_at
+FROM battles 
+WHERE (challenger_id = $1 OR opponent_id = $1) AND status = 'completed'
+ORDER BY completed_at DESC
+LIMIT $2 OFFSET $3
+`
+
+type getUserBattleHistoryParams struct {
+	ChallengerID string `json:"challenger_id"`
+	Limit        int32  `json:"limit"`
+	Offset       int32  `json:"offset"`
+}
+
+func (q *Queries) getUserBattleHistory(ctx context.Context, arg getUserBattleHistoryParams) ([]Battle, error) {
+	rows, err := q.db.Query(ctx, getUserBattleHistory, arg.ChallengerID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Battle
+	for rows.Next() {
+		var i Battle
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChallengerID,
+			&i.OpponentID,
+			&i.WinnerID,
+			&i.Status,
+			&i.TurnCount,
+			&i.CurrentTurnPlayer,
+			&i.MainThreadID,
+			&i.ChallengerThreadID,
+			&i.OpponentThreadID,
+			&i.BattleSettings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserElo = `-- name: getUserElo :one
+SELECT user_id, elo_rating, battles_won, battles_lost, battles_total, highest_elo, created_at, updated_at
+FROM user_elo WHERE user_id = $1
+`
+
+func (q *Queries) getUserElo(ctx context.Context, userID string) (UserElo, error) {
+	row := q.db.QueryRow(ctx, getUserElo, userID)
+	var i UserElo
+	err := row.Scan(
+		&i.UserID,
+		&i.EloRating,
+		&i.BattlesWon,
+		&i.BattlesLost,
+		&i.BattlesTotal,
+		&i.HighestElo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserEloRank = `-- name: getUserEloRank :one
+SELECT COUNT(*) + 1 as rank
+FROM user_elo u1
+WHERE u1.elo_rating > (
+    SELECT u2.elo_rating 
+    FROM user_elo u2 
+    WHERE u2.user_id = $1
+)
+AND u1.battles_total >= $2
+`
+
+type getUserEloRankParams struct {
+	UserID       string `json:"user_id"`
+	BattlesTotal int32  `json:"battles_total"`
+}
+
+func (q *Queries) getUserEloRank(ctx context.Context, arg getUserEloRankParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getUserEloRank, arg.UserID, arg.BattlesTotal)
+	var rank int32
+	err := row.Scan(&rank)
+	return rank, err
 }
 
 const getUserWithSelectedCharacter = `-- name: getUserWithSelectedCharacter :one
@@ -907,6 +1512,106 @@ func (q *Queries) searchCharactersByNickname(ctx context.Context, arg searchChar
 	return items, nil
 }
 
+const updateBattle = `-- name: updateBattle :one
+UPDATE battles 
+SET winner_id = $2, status = $3, turn_count = $4, current_turn_player = $5, main_thread_id = $6, challenger_thread_id = $7, opponent_thread_id = $8, battle_settings = $9, updated_at = $10, completed_at = $11
+WHERE id = $1
+RETURNING id, challenger_id, opponent_id, winner_id, status, turn_count, current_turn_player, main_thread_id, challenger_thread_id, opponent_thread_id, battle_settings, created_at, updated_at, completed_at
+`
+
+type updateBattleParams struct {
+	ID                 uuid.UUID          `json:"id"`
+	WinnerID           pgtype.Text        `json:"winner_id"`
+	Status             string             `json:"status"`
+	TurnCount          int32              `json:"turn_count"`
+	CurrentTurnPlayer  pgtype.Text        `json:"current_turn_player"`
+	MainThreadID       pgtype.Text        `json:"main_thread_id"`
+	ChallengerThreadID pgtype.Text        `json:"challenger_thread_id"`
+	OpponentThreadID   pgtype.Text        `json:"opponent_thread_id"`
+	BattleSettings     []byte             `json:"battle_settings"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+}
+
+func (q *Queries) updateBattle(ctx context.Context, arg updateBattleParams) (Battle, error) {
+	row := q.db.QueryRow(ctx, updateBattle,
+		arg.ID,
+		arg.WinnerID,
+		arg.Status,
+		arg.TurnCount,
+		arg.CurrentTurnPlayer,
+		arg.MainThreadID,
+		arg.ChallengerThreadID,
+		arg.OpponentThreadID,
+		arg.BattleSettings,
+		arg.UpdatedAt,
+		arg.CompletedAt,
+	)
+	var i Battle
+	err := row.Scan(
+		&i.ID,
+		&i.ChallengerID,
+		&i.OpponentID,
+		&i.WinnerID,
+		&i.Status,
+		&i.TurnCount,
+		&i.CurrentTurnPlayer,
+		&i.MainThreadID,
+		&i.ChallengerThreadID,
+		&i.OpponentThreadID,
+		&i.BattleSettings,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const updateBattleTeamMember = `-- name: updateBattleTeamMember :one
+UPDATE battle_teams 
+SET current_hp = $3, status_effects = $4, stat_stages = $5, is_active = $6, is_fainted = $7
+WHERE id = $1 AND battle_id = $2
+RETURNING id, battle_id, user_id, team_position, character_id, character_data, current_hp, status_effects, stat_stages, is_active, is_fainted, created_at
+`
+
+type updateBattleTeamMemberParams struct {
+	ID            uuid.UUID `json:"id"`
+	BattleID      uuid.UUID `json:"battle_id"`
+	CurrentHp     int32     `json:"current_hp"`
+	StatusEffects []string  `json:"status_effects"`
+	StatStages    []byte    `json:"stat_stages"`
+	IsActive      bool      `json:"is_active"`
+	IsFainted     bool      `json:"is_fainted"`
+}
+
+func (q *Queries) updateBattleTeamMember(ctx context.Context, arg updateBattleTeamMemberParams) (BattleTeam, error) {
+	row := q.db.QueryRow(ctx, updateBattleTeamMember,
+		arg.ID,
+		arg.BattleID,
+		arg.CurrentHp,
+		arg.StatusEffects,
+		arg.StatStages,
+		arg.IsActive,
+		arg.IsFainted,
+	)
+	var i BattleTeam
+	err := row.Scan(
+		&i.ID,
+		&i.BattleID,
+		&i.UserID,
+		&i.TeamPosition,
+		&i.CharacterID,
+		&i.CharacterData,
+		&i.CurrentHp,
+		&i.StatusEffects,
+		&i.StatStages,
+		&i.IsActive,
+		&i.IsFainted,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateCharacter = `-- name: updateCharacter :one
 UPDATE characters SET owner_id = $2, claimed_timestamp = $3, idx = $4, character_id = $5, level = $6, xp = $7, personality = $8, shiny = $9, iv_hp = $10, iv_atk = $11, iv_def = $12, iv_sp_atk = $13, iv_sp_def = $14, iv_spd = $15, iv_total = $16, nickname = $17, favourite = $18, held_item = $19, moves = $20, color = $21 WHERE id = $1 RETURNING id, owner_id, claimed_timestamp, idx, character_id, level, xp, personality, shiny, iv_hp, iv_atk, iv_def, iv_sp_atk, iv_sp_def, iv_spd, iv_total, nickname, favourite, held_item, moves, color
 `
@@ -986,6 +1691,20 @@ func (q *Queries) updateCharacter(ctx context.Context, arg updateCharacterParams
 	return i, err
 }
 
+const updateGameSetting = `-- name: updateGameSetting :exec
+UPDATE game_settings SET setting_value = $2, updated_at = CURRENT_TIMESTAMP WHERE setting_key = $1
+`
+
+type updateGameSettingParams struct {
+	SettingKey   string `json:"setting_key"`
+	SettingValue string `json:"setting_value"`
+}
+
+func (q *Queries) updateGameSetting(ctx context.Context, arg updateGameSettingParams) error {
+	_, err := q.db.Exec(ctx, updateGameSetting, arg.SettingKey, arg.SettingValue)
+	return err
+}
+
 const updateUser = `-- name: updateUser :one
 UPDATE users SET balance = $2, selected_id = $3, order_by = $4, order_desc = $5, shinies_caught = $6, next_idx = $7 WHERE id = $1 RETURNING id, balance, selected_id, order_by, order_desc, shinies_caught, next_idx
 `
@@ -1019,6 +1738,47 @@ func (q *Queries) updateUser(ctx context.Context, arg updateUserParams) (User, e
 		&i.OrderDesc,
 		&i.ShiniesCaught,
 		&i.NextIdx,
+	)
+	return i, err
+}
+
+const updateUserElo = `-- name: updateUserElo :one
+UPDATE user_elo 
+SET elo_rating = $2, battles_won = $3, battles_lost = $4, battles_total = $5, highest_elo = $6, updated_at = $7
+WHERE user_id = $1
+RETURNING user_id, elo_rating, battles_won, battles_lost, battles_total, highest_elo, created_at, updated_at
+`
+
+type updateUserEloParams struct {
+	UserID       string    `json:"user_id"`
+	EloRating    int32     `json:"elo_rating"`
+	BattlesWon   int32     `json:"battles_won"`
+	BattlesLost  int32     `json:"battles_lost"`
+	BattlesTotal int32     `json:"battles_total"`
+	HighestElo   int32     `json:"highest_elo"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (q *Queries) updateUserElo(ctx context.Context, arg updateUserEloParams) (UserElo, error) {
+	row := q.db.QueryRow(ctx, updateUserElo,
+		arg.UserID,
+		arg.EloRating,
+		arg.BattlesWon,
+		arg.BattlesLost,
+		arg.BattlesTotal,
+		arg.HighestElo,
+		arg.UpdatedAt,
+	)
+	var i UserElo
+	err := row.Scan(
+		&i.UserID,
+		&i.EloRating,
+		&i.BattlesWon,
+		&i.BattlesLost,
+		&i.BattlesTotal,
+		&i.HighestElo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

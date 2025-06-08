@@ -8,7 +8,51 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type Battle struct {
+	ID                 uuid.UUID          `json:"id"`
+	ChallengerID       string             `json:"challenger_id"`
+	OpponentID         string             `json:"opponent_id"`
+	WinnerID           pgtype.Text        `json:"winner_id"`
+	Status             string             `json:"status"`
+	TurnCount          int32              `json:"turn_count"`
+	CurrentTurnPlayer  pgtype.Text        `json:"current_turn_player"`
+	MainThreadID       pgtype.Text        `json:"main_thread_id"`
+	ChallengerThreadID pgtype.Text        `json:"challenger_thread_id"`
+	OpponentThreadID   pgtype.Text        `json:"opponent_thread_id"`
+	BattleSettings     []byte             `json:"battle_settings"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
+}
+
+type BattleTeam struct {
+	ID            uuid.UUID `json:"id"`
+	BattleID      uuid.UUID `json:"battle_id"`
+	UserID        string    `json:"user_id"`
+	TeamPosition  int32     `json:"team_position"`
+	CharacterID   uuid.UUID `json:"character_id"`
+	CharacterData []byte    `json:"character_data"`
+	CurrentHp     int32     `json:"current_hp"`
+	StatusEffects []string  `json:"status_effects"`
+	StatStages    []byte    `json:"stat_stages"`
+	IsActive      bool      `json:"is_active"`
+	IsFainted     bool      `json:"is_fainted"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type BattleTurn struct {
+	ID         uuid.UUID `json:"id"`
+	BattleID   uuid.UUID `json:"battle_id"`
+	TurnNumber int32     `json:"turn_number"`
+	UserID     string    `json:"user_id"`
+	ActionType string    `json:"action_type"`
+	ActionData []byte    `json:"action_data"`
+	ResultData []byte    `json:"result_data"`
+	CreatedAt  time.Time `json:"created_at"`
+}
 
 type Character struct {
 	ID               uuid.UUID `json:"id"`
@@ -34,6 +78,14 @@ type Character struct {
 	Color            int32     `json:"color"`
 }
 
+type GameSetting struct {
+	ID           int32     `json:"id"`
+	SettingKey   string    `json:"setting_key"`
+	SettingValue string    `json:"setting_value"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type User struct {
 	ID            string    `json:"id"`
 	Balance       int32     `json:"balance"`
@@ -42,4 +94,15 @@ type User struct {
 	OrderDesc     bool      `json:"order_desc"`
 	ShiniesCaught int32     `json:"shinies_caught"`
 	NextIdx       int32     `json:"next_idx"`
+}
+
+type UserElo struct {
+	UserID       string    `json:"user_id"`
+	EloRating    int32     `json:"elo_rating"`
+	BattlesWon   int32     `json:"battles_won"`
+	BattlesLost  int32     `json:"battles_lost"`
+	BattlesTotal int32     `json:"battles_total"`
+	HighestElo   int32     `json:"highest_elo"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }

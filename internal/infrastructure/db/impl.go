@@ -3,11 +3,15 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/core/entities"
 	"github.com/theoreotm/friemon/internal/pkg/logger"
@@ -15,6 +19,24 @@ import (
 )
 
 var _ Store = (*Queries)(nil)
+
+func stringToPgText(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{Valid: false}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
+func pgTextToString(pt pgtype.Text) *string {
+	if !pt.Valid {
+		return nil
+	}
+	return &pt.String
+}
+
+func stringToPgTextRequired(s string) pgtype.Text {
+	return pgtype.Text{String: s, Valid: true}
+}
 
 func (q *Queries) DeleteEverything(ctx context.Context) error {
 	err := q.deleteUsers(ctx)
@@ -293,4 +315,550 @@ func stringToPersonality(s string) constants.Personality {
 		}
 	}
 	return constants.PersonalityAloof
+}
+
+func (q *Queries) GetGameSettings(ctx context.Context) (entities.GameSettings, error) {
+	settings := entities.GameSettings{
+		TurnLimit:          25,
+		TurnTimeoutSeconds: 60,
+		SwitchCostsTurn:    false,
+		MaxTeamSize:        3,
+	}
+
+	rows, err := q.getAllGameSettings(ctx)
+	if err != nil {
+		return settings, err
+	}
+
+	for _, row := range rows {
+		switch row.SettingKey {
+		case "battle_turn_limit":
+			if val, err := strconv.Atoi(row.SettingValue); err == nil {
+				settings.TurnLimit = val
+			}
+		case "battle_turn_timeout_seconds":
+			if val, err := strconv.Atoi(row.SettingValue); err == nil {
+				settings.TurnTimeoutSeconds = val
+			}
+		case "battle_switch_costs_turn":
+			settings.SwitchCostsTurn = row.SettingValue == "true"
+		case "battle_max_team_size":
+			if val, err := strconv.Atoi(row.SettingValue); err == nil {
+				settings.MaxTeamSize = val
+			}
+		}
+	}
+
+	return settings, nil
+}
+
+func (q *Queries) GetGameSetting(ctx context.Context, key string) (string, error) {
+	return q.getGameSetting(ctx, key)
+}
+
+func (q *Queries) UpdateGameSetting(ctx context.Context, key, value string) error {
+	return q.updateGameSetting(ctx, updateGameSettingParams{SettingKey: key, SettingValue: value})
+}
+
+func (q *Queries) CreateGameSetting(ctx context.Context, key, value string) error {
+	return q.createGameSetting(ctx, createGameSettingParams{SettingKey: key, SettingValue: value})
+}
+
+// Battle methods
+func (q *Queries) CreateBattle(ctx context.Context, battle *entities.Battle) error {
+	settingsJSON, err := json.Marshal(battle.Settings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal battle settings: %w", err)
+	}
+
+	_, err = q.createBattle(ctx, createBattleParams{
+		ID:             battle.ID,
+		ChallengerID:   battle.ChallengerID.String(),
+		OpponentID:     battle.OpponentID.String(),
+		Status:         string(battle.Status),
+		BattleSettings: settingsJSON,
+		CreatedAt:      battle.CreatedAt,
+		UpdatedAt:      battle.UpdatedAt,
+	})
+
+	return err
+}
+
+func (q *Queries) GetBattle(ctx context.Context, id uuid.UUID) (*entities.Battle, error) {
+	row, err := q.getBattle(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return dbBattleToModelBattle(row)
+}
+
+func (q *Queries) UpdateBattle(ctx context.Context, battle *entities.Battle) error {
+	settingsJSON, err := json.Marshal(battle.Settings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal battle settings: %w", err)
+	}
+
+	var winnerID pgtype.Text
+	if battle.WinnerID != nil {
+		winnerID = stringToPgTextRequired(battle.WinnerID.String())
+	} else {
+		winnerID = pgtype.Text{Valid: false}
+	}
+
+	var currentPlayer pgtype.Text
+	if battle.CurrentTurnPlayer != nil {
+		currentPlayer = stringToPgTextRequired(battle.CurrentTurnPlayer.String())
+	} else {
+		currentPlayer = pgtype.Text{Valid: false}
+	}
+
+	var mainThreadID, challengerThreadID, opponentThreadID pgtype.Text
+	if battle.MainThreadID != nil {
+		mainThreadID = stringToPgTextRequired(battle.MainThreadID.String())
+	} else {
+		mainThreadID = pgtype.Text{Valid: false}
+	}
+
+	if battle.ChallengerThreadID != nil {
+		challengerThreadID = stringToPgTextRequired(battle.ChallengerThreadID.String())
+	} else {
+		challengerThreadID = pgtype.Text{Valid: false}
+	}
+
+	if battle.OpponentThreadID != nil {
+		opponentThreadID = stringToPgTextRequired(battle.OpponentThreadID.String())
+	} else {
+		opponentThreadID = pgtype.Text{Valid: false}
+	}
+
+	var completedAt pgtype.Timestamptz
+	if battle.CompletedAt != nil {
+		completedAt = pgtype.Timestamptz{Time: *battle.CompletedAt, Valid: true}
+	} else {
+		completedAt = pgtype.Timestamptz{Valid: false}
+	}
+
+	_, err = q.updateBattle(ctx, updateBattleParams{
+		ID:                 battle.ID,
+		WinnerID:           winnerID,
+		Status:             string(battle.Status),
+		TurnCount:          int32(battle.TurnCount),
+		CurrentTurnPlayer:  currentPlayer,
+		MainThreadID:       mainThreadID,
+		ChallengerThreadID: challengerThreadID,
+		OpponentThreadID:   opponentThreadID,
+		BattleSettings:     settingsJSON,
+		UpdatedAt:          time.Now(),
+		CompletedAt:        completedAt,
+	})
+
+	return err
+}
+
+func (q *Queries) GetActiveBattleForUser(ctx context.Context, userID snowflake.ID) (*entities.Battle, error) {
+	row, err := q.getActiveBattleForUser(ctx, userID.String())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return dbBattleToModelBattle(row)
+}
+
+func (q *Queries) GetUserBattleHistory(ctx context.Context, userID snowflake.ID, limit, offset int) ([]*entities.Battle, error) {
+	rows, err := q.getUserBattleHistory(ctx, getUserBattleHistoryParams{ChallengerID: userID.String(), Limit: int32(limit), Offset: int32(offset)})
+	if err != nil {
+		return nil, err
+	}
+
+	battles := make([]*entities.Battle, len(rows))
+	for i, row := range rows {
+		battle, err := dbBattleToModelBattle(row)
+		if err != nil {
+			return nil, err
+		}
+		battles[i] = battle
+	}
+
+	return battles, nil
+}
+
+func (q *Queries) GetBattlesByStatus(ctx context.Context, status entities.BattleStatus) ([]*entities.Battle, error) {
+	rows, err := q.getBattlesByStatus(ctx, string(status))
+	if err != nil {
+		return nil, err
+	}
+
+	battles := make([]*entities.Battle, len(rows))
+	for i, row := range rows {
+		battle, err := dbBattleToModelBattle(row)
+		if err != nil {
+			return nil, err
+		}
+		battles[i] = battle
+	}
+
+	return battles, nil
+}
+
+// Battle Team methods
+func (q *Queries) CreateBattleTeamMember(ctx context.Context, member *entities.BattleTeamMember) error {
+	characterDataJSON, err := json.Marshal(member.CharacterData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal character data: %w", err)
+	}
+
+	statStagesJSON, err := json.Marshal(member.StatStages)
+	if err != nil {
+		return fmt.Errorf("failed to marshal stat stages: %w", err)
+	}
+
+	statusEffectsStr := make([]string, len(member.StatusEffects))
+	for i, effect := range member.StatusEffects {
+		statusEffectsStr[i] = string(effect)
+	}
+
+	_, err = q.createBattleTeamMember(ctx, createBattleTeamMemberParams{
+		ID:            member.ID,
+		BattleID:      member.BattleID,
+		UserID:        member.UserID.String(),
+		TeamPosition:  int32(member.TeamPosition),
+		CharacterID:   member.CharacterID,
+		CharacterData: characterDataJSON,
+		CurrentHp:     int32(member.CurrentHP),
+		StatusEffects: statusEffectsStr,
+		StatStages:    statStagesJSON,
+		IsActive:      member.IsActive,
+		IsFainted:     member.IsFainted,
+		CreatedAt:     member.CreatedAt,
+	})
+
+	return err
+}
+
+func (q *Queries) GetBattleTeam(ctx context.Context, battleID uuid.UUID, userID snowflake.ID) ([]*entities.BattleTeamMember, error) {
+	rows, err := q.getBattleTeam(ctx, getBattleTeamParams{
+		BattleID: battleID,
+		UserID:   userID.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	members := make([]*entities.BattleTeamMember, len(rows))
+	for i, row := range rows {
+		member, err := dbBattleTeamMemberToModel(row)
+		if err != nil {
+			return nil, err
+		}
+		members[i] = member
+	}
+
+	return members, nil
+}
+
+func (q *Queries) UpdateBattleTeamMember(ctx context.Context, member *entities.BattleTeamMember) error {
+	statStagesJSON, err := json.Marshal(member.StatStages)
+	if err != nil {
+		return fmt.Errorf("failed to marshal stat stages: %w", err)
+	}
+
+	statusEffectsStr := make([]string, len(member.StatusEffects))
+	for i, effect := range member.StatusEffects {
+		statusEffectsStr[i] = string(effect)
+	}
+
+	_, err = q.updateBattleTeamMember(ctx, updateBattleTeamMemberParams{
+		ID:            member.ID,
+		BattleID:      member.BattleID,
+		CurrentHp:     int32(member.CurrentHP),
+		StatusEffects: statusEffectsStr,
+		StatStages:    statStagesJSON,
+		IsActive:      member.IsActive,
+		IsFainted:     member.IsFainted,
+	})
+
+	return err
+}
+
+func (q *Queries) GetBattleTeamMember(ctx context.Context, id uuid.UUID) (*entities.BattleTeamMember, error) {
+	row, err := q.getBattleTeamMember(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return dbBattleTeamMemberToModel(row)
+}
+
+// Battle Turn methods
+func (q *Queries) CreateBattleTurn(ctx context.Context, turn *entities.BattleTurn) error {
+	actionDataJSON, err := json.Marshal(turn.ActionData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal action data: %w", err)
+	}
+
+	resultDataJSON, err := json.Marshal(turn.ResultData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal result data: %w", err)
+	}
+
+	_, err = q.createBattleTurn(ctx, createBattleTurnParams{
+		ID:         turn.ID,
+		BattleID:   turn.BattleID,
+		TurnNumber: int32(turn.TurnNumber),
+		UserID:     turn.UserID.String(),
+		ActionType: string(turn.ActionType),
+		ActionData: actionDataJSON,
+		ResultData: resultDataJSON,
+		CreatedAt:  turn.CreatedAt,
+	})
+
+	return err
+}
+
+func (q *Queries) GetBattleTurns(ctx context.Context, battleID uuid.UUID) ([]*entities.BattleTurn, error) {
+	rows, err := q.getBattleTurns(ctx, battleID)
+	if err != nil {
+		return nil, err
+	}
+
+	turns := make([]*entities.BattleTurn, len(rows))
+	for i, row := range rows {
+		turn, err := dbBattleTurnToModel(row)
+		if err != nil {
+			return nil, err
+		}
+		turns[i] = turn
+	}
+
+	return turns, nil
+}
+
+func (q *Queries) GetLastBattleTurn(ctx context.Context, battleID uuid.UUID) (*entities.BattleTurn, error) {
+	row, err := q.getLastBattleTurn(ctx, battleID)
+	if err != nil {
+		return nil, err
+	}
+
+	return dbBattleTurnToModel(row)
+}
+
+// ELO methods
+func (q *Queries) GetUserElo(ctx context.Context, userID snowflake.ID) (*entities.UserElo, error) {
+	row, err := q.getUserElo(ctx, userID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return dbUserEloToModel(row), nil
+}
+
+func (q *Queries) CreateUserElo(ctx context.Context, elo *entities.UserElo) error {
+	_, err := q.createUserElo(ctx, createUserEloParams{
+		UserID:       elo.UserID.String(),
+		EloRating:    int32(elo.EloRating),
+		BattlesWon:   int32(elo.BattlesWon),
+		BattlesLost:  int32(elo.BattlesLost),
+		BattlesTotal: int32(elo.BattlesTotal),
+		HighestElo:   int32(elo.HighestElo),
+		CreatedAt:    elo.CreatedAt,
+		UpdatedAt:    elo.UpdatedAt,
+	})
+
+	return err
+}
+
+func (q *Queries) UpdateUserElo(ctx context.Context, elo *entities.UserElo) error {
+	_, err := q.updateUserElo(ctx, updateUserEloParams{
+		UserID:       elo.UserID.String(),
+		EloRating:    int32(elo.EloRating),
+		BattlesWon:   int32(elo.BattlesWon),
+		BattlesLost:  int32(elo.BattlesLost),
+		BattlesTotal: int32(elo.BattlesTotal),
+		HighestElo:   int32(elo.HighestElo),
+		UpdatedAt:    time.Now(),
+	})
+
+	return err
+}
+
+func (q *Queries) GetEloLeaderboard(ctx context.Context, minBattles, limit, offset int) ([]*entities.UserElo, error) {
+	rows, err := q.getEloLeaderboard(ctx, getEloLeaderboardParams{
+		BattlesTotal: int32(minBattles),
+		Limit:        int32(limit),
+		Offset:       int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	leaderboard := make([]*entities.UserElo, len(rows))
+	for i, row := range rows {
+		leaderboard[i] = dbUserEloToModel(row)
+	}
+
+	return leaderboard, nil
+}
+
+func (q *Queries) GetUserEloRank(ctx context.Context, userID snowflake.ID, minBattles int) (int, error) {
+	rank, err := q.getUserEloRank(ctx, getUserEloRankParams{UserID: userID.String(), BattlesTotal: int32(minBattles)})
+	if err != nil {
+		return 0, err
+	}
+
+	return int(rank), nil
+}
+
+// Helper conversion functions
+func dbBattleToModelBattle(row Battle) (*entities.Battle, error) {
+	var settings entities.GameSettings
+	if err := json.Unmarshal(row.BattleSettings, &settings); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal battle settings: %w", err)
+	}
+
+	challengerID, err := snowflake.Parse(row.ChallengerID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid challenger ID: %w", err)
+	}
+
+	opponentID, err := snowflake.Parse(row.OpponentID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid opponent ID: %w", err)
+	}
+
+	battle := &entities.Battle{
+		ID:           row.ID,
+		ChallengerID: challengerID,
+		OpponentID:   opponentID,
+		Status:       entities.BattleStatus(row.Status),
+		TurnCount:    int(row.TurnCount),
+		Settings:     settings,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}
+
+	// Handle nullable fields with pgtype.Text
+	if row.WinnerID.Valid {
+		winnerID, err := snowflake.Parse(row.WinnerID.String)
+		if err == nil {
+			battle.WinnerID = &winnerID
+		}
+	}
+
+	if row.CurrentTurnPlayer.Valid {
+		currentPlayer, err := snowflake.Parse(row.CurrentTurnPlayer.String)
+		if err == nil {
+			battle.CurrentTurnPlayer = &currentPlayer
+		}
+	}
+
+	if row.MainThreadID.Valid {
+		mainThreadID, err := snowflake.Parse(row.MainThreadID.String)
+		if err == nil {
+			battle.MainThreadID = &mainThreadID
+		}
+	}
+
+	if row.ChallengerThreadID.Valid {
+		challengerThreadID, err := snowflake.Parse(row.ChallengerThreadID.String)
+		if err == nil {
+			battle.ChallengerThreadID = &challengerThreadID
+		}
+	}
+
+	if row.OpponentThreadID.Valid {
+		opponentThreadID, err := snowflake.Parse(row.OpponentThreadID.String)
+		if err == nil {
+			battle.OpponentThreadID = &opponentThreadID
+		}
+	}
+
+	if row.CompletedAt.Valid {
+		battle.CompletedAt = &row.CompletedAt.Time
+	}
+
+	return battle, nil
+}
+
+func dbBattleTeamMemberToModel(row BattleTeam) (*entities.BattleTeamMember, error) {
+	var characterData entities.Character
+	if err := json.Unmarshal(row.CharacterData, &characterData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal character data: %w", err)
+	}
+
+	var statStages map[string]int
+	if err := json.Unmarshal(row.StatStages, &statStages); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal stat stages: %w", err)
+	}
+
+	userID, err := snowflake.Parse(row.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	statusEffects := make([]constants.StatusEffect, len(row.StatusEffects))
+	for i, effect := range row.StatusEffects {
+		statusEffects[i] = constants.StatusEffect(effect)
+	}
+
+	return &entities.BattleTeamMember{
+		ID:            row.ID,
+		BattleID:      row.BattleID,
+		UserID:        userID,
+		TeamPosition:  int(row.TeamPosition),
+		CharacterID:   row.CharacterID,
+		CharacterData: characterData,
+		CurrentHP:     int(row.CurrentHp),
+		StatusEffects: statusEffects,
+		StatStages:    statStages,
+		IsActive:      row.IsActive,
+		IsFainted:     row.IsFainted,
+		CreatedAt:     row.CreatedAt,
+	}, nil
+}
+
+func dbBattleTurnToModel(row BattleTurn) (*entities.BattleTurn, error) {
+	var actionData map[string]interface{}
+	if err := json.Unmarshal(row.ActionData, &actionData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal action data: %w", err)
+	}
+
+	var resultData map[string]interface{}
+	if err := json.Unmarshal(row.ResultData, &resultData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal result data: %w", err)
+	}
+
+	userID, err := snowflake.Parse(row.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	return &entities.BattleTurn{
+		ID:         row.ID,
+		BattleID:   row.BattleID,
+		TurnNumber: int(row.TurnNumber),
+		UserID:     userID,
+		ActionType: entities.ActionType(row.ActionType),
+		ActionData: actionData,
+		ResultData: resultData,
+		CreatedAt:  row.CreatedAt,
+	}, nil
+}
+
+func dbUserEloToModel(row UserElo) *entities.UserElo {
+	userID, _ := snowflake.Parse(row.UserID)
+
+	return &entities.UserElo{
+		UserID:       userID,
+		EloRating:    int(row.EloRating),
+		BattlesWon:   int(row.BattlesWon),
+		BattlesLost:  int(row.BattlesLost),
+		BattlesTotal: int(row.BattlesTotal),
+		HighestElo:   int(row.HighestElo),
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}
 }

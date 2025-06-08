@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS battle_turns;
+DROP TABLE IF EXISTS battle_teams;
+DROP TABLE IF EXISTS battles;
+DROP TABLE IF EXISTS user_elo;
+DROP TABLE IF EXISTS game_settings;
