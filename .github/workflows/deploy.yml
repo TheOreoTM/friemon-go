@@ -10,7 +10,7 @@ on:
 
 env:
     DOCKER_IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/friemon-bot
-    REGISTRY: docker.io # or ghcr.io for GitHub Container Registry
+    REGISTRY: docker.io
 
 jobs:
     build-and-test:
@@ -44,14 +44,10 @@ jobs:
               run: |
                   go mod download
                   go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
-                  go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
             - name: Run linters
               run: golangci-lint run ./...
               continue-on-error: true
-
-            - name: Generate SQLC code
-              run: sqlc generate
 
             - name: Run tests
               run: go test -v ./...
@@ -93,7 +89,7 @@ jobs:
         runs-on: ubuntu-latest
         needs: build-and-test
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        environment: production # Add environment protection if needed
+        environment: production
 
         steps:
             - name: Deploy to VPS via SSH
@@ -107,8 +103,6 @@ jobs:
                   command_timeout: 300s
                   script: |
                       set -e
-
-                      # Configuration
                       PROJECT_DIR="$HOME/friemon-go"
                       IMAGE_TAG="${{ needs.build-and-test.outputs.image-tag }}"
                       BUILD_NUMBER="${{ github.run_number }}"
@@ -117,107 +111,79 @@ jobs:
                       echo "📦 Using image tag: $IMAGE_TAG"
                       echo "🔢 Build number: $BUILD_NUMBER"
 
-                      # Navigate to project directory
                       echo "📁 Navigating to project directory..."
                       cd "$PROJECT_DIR"
 
-                      # Backup current .env if it exists
                       if [ -f .env ]; then
                           echo "💾 Backing up current .env..."
                           cp .env .env.backup.$(date +%Y%m%d-%H%M%S)
                       fi
 
-                      # Create/update .env file with all required variables
                       echo "⚙️ Creating .env file..."
                       cat > .env << EOF
-                      # Bot Configuration
                       BOT_TOKEN=${{ secrets.BOT_TOKEN }}
                       BOT_VERSION=1.0.0
                       DEV_MODE=false
                       SYNC_COMMANDS=true
-
-                      # Logging
                       LOG_LEVEL=info
                       LOG_FORMAT=json
                       LOG_ADD_SOURCE=false
                       LOG_OUTPUT_PATH=stdout
-
-                      # Database
                       DB_HOST=postgres
                       DB_PORT=5432
                       DB_USER=friemon
                       DB_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
                       DB_NAME=friemon
                       DB_SSL_MODE=disable
-
-                      # PostgreSQL (for docker-compose)
                       POSTGRES_USER=friemon
                       POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
                       POSTGRES_DB=friemon
-
-                      # Redis
                       REDIS_ADDR=redis:6379
                       REDIS_PASSWORD=
                       REDIS_DB=0
-
-                      # PgAdmin
                       PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}
-
-                      # Docker Image
                       FRIEMON_IMAGE=${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG
-
-                      # General
                       TZ=UTC
                       ASSETS_DIR=./assets
                       EOF
-
                       echo "✅ .env file created"
 
-                      # Pull latest code (as backup, though we're using Docker images)
                       echo "📥 Pulling latest code..."
                       git fetch origin
                       git reset --hard origin/main
 
-                      # Remove old images to save space
                       echo "🧹 Cleaning up old Docker images..."
                       docker image prune -f
                       docker system prune -f --volumes=false
 
-                      # Pull the specific image we just built
                       echo "📦 Pulling Docker image: ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG"
                       docker pull ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG
 
-                      # Verify image was pulled
                       if ! docker images | grep -q "$IMAGE_TAG"; then
                           echo "❌ Failed to pull image with tag $IMAGE_TAG"
                           exit 1
                       fi
                       echo "✅ Image pulled successfully"
 
-                      # Update docker-compose.yml to use specific image tag
                       echo "📝 Updating docker-compose.yml to use specific image..."
                       if [ -f docker-compose.override.yml ]; then
                           rm docker-compose.override.yml
                       fi
 
-                      # Create override file to use specific image
                       cat > docker-compose.override.yml << EOF
                       version: '3.9'
                       services:
                         bot:
                           image: ${{ env.DOCKER_IMAGE_NAME }}:$IMAGE_TAG
-                          pull_policy: never  # Don't pull, we already have the image
+                          pull_policy: never
                       EOF
 
-                      # Stop current containers
                       echo "⏹️ Stopping current containers..."
                       docker-compose down --remove-orphans
 
-                      # Start new containers
                       echo "🚀 Starting new containers..."
                       docker-compose up -d --remove-orphans
 
-                      # Wait for PostgreSQL to be ready
                       echo "⏳ Waiting for PostgreSQL to be ready..."
                       timeout=60
                       counter=0
@@ -233,20 +199,6 @@ jobs:
                       done
                       echo "✅ PostgreSQL is ready"
 
-                      # Check if migrate command is available
-                      if ! command -v migrate &> /dev/null; then
-                          echo "📦 Installing migrate CLI..."
-                          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
-                          sudo mv migrate /usr/local/bin/
-                          rm -f README.md LICENSE
-                      fi
-
-                      # Run database migrations
-                      echo "🔄 Running database migrations..."
-                      migrate -database "postgres://friemon:${{ secrets.POSTGRES_PASSWORD }}@localhost:5433/friemon?sslmode=disable" \
-                              -path ./internal/infrastructure/db/migrations up
-
-                      # Verify bot is running
                       echo "🔍 Verifying bot container..."
                       sleep 5
                       if ! docker-compose ps | grep friemon_bot | grep -q "Up"; then
@@ -256,7 +208,6 @@ jobs:
                           exit 1
                       fi
 
-                      # Show final status
                       echo "📊 Deployment Status:"
                       echo "===================="
                       docker-compose ps
@@ -279,19 +230,14 @@ jobs:
                   port: 22
                   script: |
                       cd ~/friemon-go
-
                       echo "🏥 Running health checks..."
-
-                      # Wait a bit for the bot to fully start
                       sleep 10
 
-                      # Check if bot container is healthy
                       if ! docker-compose ps | grep friemon_bot | grep -q "Up"; then
                           echo "❌ Health check failed: Bot container is not running"
                           exit 1
                       fi
 
-                      # Check bot logs for any immediate errors
                       recent_logs=$(docker-compose logs --tail=50 bot)
                       if echo "$recent_logs" | grep -i "error\|fatal\|panic"; then
                           echo "⚠️ Warning: Found error messages in recent logs"
@@ -305,6 +251,7 @@ jobs:
         runs-on: ubuntu-latest
         needs: [build-and-test, deploy]
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+
         steps:
             - name: Notify Success
               if: needs.deploy.result == 'success'

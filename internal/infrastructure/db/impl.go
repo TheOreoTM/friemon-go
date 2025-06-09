@@ -2,248 +2,230 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"time"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
+
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/core/entities"
-	"github.com/theoreotm/friemon/internal/pkg/logger"
-	"go.uber.org/zap"
 )
 
-var _ Store = (*Queries)(nil)
+var _ Store = (*DB)(nil)
 
-func (q *Queries) DeleteEverything(ctx context.Context) error {
-	err := q.deleteUsers(ctx)
-	if err != nil {
+func (db *DB) DeleteEverything(ctx context.Context) error {
+	tx := db.WithContext(ctx)
+
+	if err := tx.Delete(&Character{}, "1=1").Error; err != nil {
 		return err
 	}
 
-	err = q.deleteCharacters(ctx)
-	if err != nil {
+	if err := tx.Delete(&User{}, "1=1").Error; err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (q *Queries) UpdateUser(ctx context.Context, user entities.User) (*entities.User, error) {
-	dbUser, err := q.updateUser(ctx, updateUserParams{
-		ID:            user.ID.String(),
-		Balance:       int32(user.Balance),
-		SelectedID:    user.SelectedID,
-		OrderBy:       int32(user.Order.OrderBy),
-		OrderDesc:     user.Order.Desc,
-		ShiniesCaught: int32(user.ShiniesCaught),
-		NextIdx:       int32(user.NextIdx),
-	})
+func (db *DB) UpdateUser(ctx context.Context, user entities.User) (*entities.User, error) {
+	dbUser := modelUserToDBUser(user)
 
-	if err != nil {
-		return &entities.User{}, err
-	}
-	return dbUserToModelUser(dbUser), nil
-}
-
-func (q *Queries) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*entities.Character, error) {
-	dbch, err := q.getSelectedCharacter(ctx, id.String())
-	if err != nil {
-		return &entities.Character{}, err
-	}
-
-	return dbCharToModelChar(dbch), nil
-}
-
-func (q *Queries) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
-	dbUser, err := q.createUser(ctx, id.String())
-	if err != nil {
-		return &entities.User{}, err
+	result := db.WithContext(ctx).Save(&dbUser)
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	return dbUserToModelUser(dbUser), nil
 }
 
-func (q *Queries) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
-	dbUser, err := q.getUser(ctx, id.String())
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			dbUser, err := q.createUser(ctx, id.String())
-			if err != nil {
-				return &entities.User{}, err
-			}
-			return dbUserToModelUser(dbUser), nil
+func (db *DB) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*entities.Character, error) {
+	var user User
+	result := db.WithContext(ctx).Preload("SelectedChar").First(&user, "id = ?", id.String())
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
 		}
-		return &entities.User{}, err
+		return nil, result.Error
 	}
-	return dbUserToModelUser(dbUser), nil // Ugly, somehow fix
+
+	if user.SelectedCharacter == nil {
+		return nil, nil
+	}
+
+	return dbCharToModelChar(*user.SelectedCharacter), nil
 }
 
-func (q *Queries) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
-	dbch, err := q.getCharacter(ctx, id)
-	if err != nil {
-		return &entities.Character{}, err
+func (db *DB) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+	dbUser := User{
+		ID:            id.String(),
+		Balance:       0,
+		OrderBy:       0,
+		OrderDesc:     false,
+		ShiniesCaught: 0,
+		NextIdx:       1,
 	}
 
-	err = q.deleteCharacter(ctx, id)
-	if err != nil {
-		return &entities.Character{}, err
+	result := db.WithContext(ctx).Create(&dbUser)
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
-	return dbCharToModelChar(dbch), nil
+	return dbUserToModelUser(dbUser), nil
 }
 
-func (q *Queries) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *entities.Character) (*entities.Character, error) {
-
-	dbch, err := q.updateCharacter(ctx, updateCharacterParams{
-		ID:               (ch.ID),
-		OwnerID:          ch.OwnerID,
-		ClaimedTimestamp: ch.ClaimedTimestamp,
-		Idx:              int32(ch.IDX),
-		CharacterID:      int32(ch.CharacterID),
-		Level:            int32(ch.Level),
-		Xp:               int32(ch.XP),
-		Personality:      ch.Personality.String(),
-		Shiny:            ch.Shiny,
-		IvHp:             int32(ch.IvHP),
-		IvAtk:            int32(ch.IvAtk),
-		IvDef:            int32(ch.IvDef),
-		IvSpAtk:          int32(ch.IvSpAtk),
-		IvSpDef:          int32(ch.IvSpDef),
-		IvSpd:            int32(ch.IvSpd),
-		IvTotal:          ch.IvTotal,
-		Nickname:         ch.Nickname,
-		Favourite:        ch.Favourite,
-		HeldItem:         int32(ch.HeldItem),
-		Moves:            ch.Moves,
-		Color:            ch.Color,
-	})
-	if err != nil {
-		return &entities.Character{}, err
+func (db *DB) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+	var user User
+	result := db.WithContext(ctx).First(&user, "id = ?", id.String())
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
 	}
 
-	return dbCharToModelChar(dbch), nil
+	return dbUserToModelUser(user), nil
 }
 
-func (q *Queries) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
-	dbch, err := q.getCharacter(ctx, id)
-	if err != nil {
-		return &entities.Character{}, err
+func (db *DB) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
+	var character Character
+	result := db.WithContext(ctx).First(&character, "id = ?", id)
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
-	return dbCharToModelChar(dbch), nil
-}
-
-func (q *Queries) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *entities.Character) error {
-	log := logger.NewLogger("database.characters")
-	start := time.Now()
-
-	log.Debug("Creating character",
-		logger.Operation("create_character"),
-		logger.DiscordUserID(ownerID),
-		logger.CharacterName(char.CharacterName()),
-		logger.CharacterLevel(char.Level),
-	)
-
-	defer func() {
-		log.Debug("Create character operation completed",
-			logger.Operation("create_character"),
-			logger.Duration(time.Since(start)),
-		)
-	}()
-
-	params := modelCharToDBChar(char)
-	params.OwnerID = ownerID.String()
-
-	dbChar, err := q.createCharacter(ctx, params)
-	if err != nil {
-		log.Error("Failed to create character",
-			logger.Operation("create_character"),
-			logger.DiscordUserID(ownerID),
-			logger.CharacterName(char.CharacterName()),
-			logger.ErrorField(err),
-		)
-		return err
-	}
-
-	// Update the character with the generated ID
-	char.ID = dbChar.ID
-
-	log.Info("Character created successfully",
-		logger.Operation("create_character"),
-		logger.DiscordUserID(ownerID),
-		logger.CharacterID(char.ID),
-		logger.CharacterName(char.CharacterName()),
-	)
-
-	return nil
-}
-
-func (q *Queries) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
-	log := logger.NewLogger("database.characters")
-	start := time.Now()
-
-	log.Debug("Getting characters for user",
-		logger.Operation("get_user_characters"),
-		logger.DiscordUserID(userID),
-	)
-
-	defer func() {
-		log.Debug("Get user characters operation completed",
-			logger.Operation("get_user_characters"),
-			logger.Duration(time.Since(start)),
-		)
-	}()
-
-	dbChars, err := q.getCharactersForUser(ctx, userID.String())
-	if err != nil {
-		log.Error("Failed to get characters for user",
-			logger.Operation("get_user_characters"),
-			logger.DiscordUserID(userID),
-			logger.ErrorField(err),
-		)
+	if err := db.WithContext(ctx).Delete(&character).Error; err != nil {
 		return nil, err
 	}
 
-	characters := make([]entities.Character, len(dbChars))
-	for i, dbChar := range dbChars {
-		characters[i] = *dbCharToModelChar(dbChar)
-	}
-
-	log.Info("Characters retrieved for user",
-		logger.Operation("get_user_characters"),
-		logger.DiscordUserID(userID),
-		zap.Int("character_count", len(characters)),
-	)
-
-	return characters, nil
+	return dbCharToModelChar(character), nil
 }
 
+func (db *DB) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *entities.Character) (*entities.Character, error) {
+	dbChar := modelCharToDBChar(ch)
+	dbChar.ID = id
+
+	result := db.WithContext(ctx).Save(&dbChar)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return dbCharToModelChar(dbChar), nil
+}
+
+func (db *DB) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
+	var character Character
+	result := db.WithContext(ctx).First(&character, "id = ?", id)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	return dbCharToModelChar(character), nil
+}
+
+func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *entities.Character) error {
+	// Get the user's next idx
+	var user User
+	result := db.WithContext(ctx).First(&user, "id = ?", ownerID.String())
+	if result.Error != nil {
+		return result.Error
+	}
+
+	char.IDX = int(user.NextIdx)
+	char.OwnerID = ownerID.String()
+
+	dbChar := modelCharToDBChar(char)
+
+	// Start a transaction
+	tx := db.WithContext(ctx).Begin()
+
+	// Create the character
+	if err := tx.Create(&dbChar).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Update user's next idx
+	if err := tx.Model(&user).Update("next_idx", user.NextIdx+1).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	char.ID = dbChar.ID
+	return nil
+}
+
+func (db *DB) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
+	var characters []Character
+	result := db.WithContext(ctx).Where("owner_id = ?", userID.String()).Order("idx ASC").Find(&characters)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	modelChars := make([]entities.Character, len(characters))
+	for i, char := range characters {
+		modelChars[i] = *dbCharToModelChar(char)
+	}
+
+	return modelChars, nil
+}
+
+func (db *DB) Tx(ctx context.Context, fn func(Store) error) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txDB := &DB{DB: tx}
+		return fn(txDB)
+	})
+}
+
+// Conversion functions
 func dbUserToModelUser(dbUser User) *entities.User {
+	orderBy := entities.OrderBy(dbUser.OrderBy)
+
 	return &entities.User{
 		ID:         snowflake.MustParse(dbUser.ID),
 		Balance:    int(dbUser.Balance),
 		SelectedID: dbUser.SelectedID,
 		Order: entities.OrderOptions{
-			OrderBy: int(dbUser.OrderBy),
+			OrderBy: orderBy,
 			Desc:    dbUser.OrderDesc,
 		},
-		ShiniesCaught: int(dbUser.ShiniesCaught),
 		NextIdx:       int(dbUser.NextIdx),
+		ShiniesCaught: int(dbUser.ShiniesCaught),
 	}
 }
 
-func modelCharToDBChar(ch *entities.Character) createCharacterParams {
-	return createCharacterParams{
-		OwnerID:          ch.OwnerID,
+func modelUserToDBUser(user entities.User) User {
+	return User{
+		ID:            user.ID.String(),
+		Balance:       int32(user.Balance),
+		SelectedID:    user.SelectedID,
+		OrderBy:       int32(user.Order.OrderBy),
+		OrderDesc:     user.Order.Desc,
+		NextIdx:       int32(user.NextIdx),
+		ShiniesCaught: int32(user.ShiniesCaught),
+	}
+}
+
+func modelCharToDBChar(ch *entities.Character) Character {
+	return Character{
+		ID:               ch.ID,
+		UserID:          ch.OwnerID,
 		ClaimedTimestamp: ch.ClaimedTimestamp,
+		IDX:              int32(ch.IDX),
 		CharacterID:      int32(ch.CharacterID),
 		Level:            int32(ch.Level),
-		Xp:               int32(ch.XP),
+		XP:               int32(ch.XP),
 		Personality:      ch.Personality.String(),
 		Shiny:            ch.Shiny,
-		IvHp:             int32(ch.IvHP),
+		IvHP:             int32(ch.IvHP),
 		IvAtk:            int32(ch.IvAtk),
 		IvDef:            int32(ch.IvDef),
 		IvSpAtk:          int32(ch.IvSpAtk),
@@ -255,7 +237,6 @@ func modelCharToDBChar(ch *entities.Character) createCharacterParams {
 		HeldItem:         int32(ch.HeldItem),
 		Moves:            ch.Moves,
 		Color:            ch.Color,
-		Idx:              int32(ch.IDX),
 	}
 }
 
@@ -264,13 +245,13 @@ func dbCharToModelChar(dbch Character) *entities.Character {
 		ID:               dbch.ID,
 		OwnerID:          dbch.OwnerID,
 		ClaimedTimestamp: dbch.ClaimedTimestamp,
-		IDX:              int(dbch.Idx),
+		IDX:              int(dbch.IDX),
 		CharacterID:      int(dbch.CharacterID),
 		Level:            int(dbch.Level),
-		XP:               int(dbch.Xp),
+		XP:               int(dbch.XP),
 		Personality:      stringToPersonality(dbch.Personality),
 		Shiny:            dbch.Shiny,
-		IvHP:             int(dbch.IvHp),
+		IvHP:             int(dbch.IvHP),
 		IvAtk:            int(dbch.IvAtk),
 		IvDef:            int(dbch.IvDef),
 		IvSpAtk:          int(dbch.IvSpAtk),
@@ -282,15 +263,32 @@ func dbCharToModelChar(dbch Character) *entities.Character {
 		HeldItem:         int(dbch.HeldItem),
 		Moves:            dbch.Moves,
 		Color:            dbch.Color,
-		BattleStats:      nil, // TODO: Load battle stats once a system is in place
 	}
 }
 
 func stringToPersonality(s string) constants.Personality {
-	for _, p := range constants.Personalities {
-		if p.String() == s {
-			return p
-		}
+	switch s {
+	case "Aloof":
+		return constants.PersonalityAloof
+	case "Stoic":
+		return constants.PersonalityStoic
+	case "Merry":
+		return constants.PersonalityMerry
+	case "Resolute":
+		return constants.PersonalityResolute
+	case "Skeptical":
+		return constants.PersonalitySkeptical
+	case "Brooding":
+		return constants.PersonalityBrooding
+	case "Brave":
+		return constants.PersonalityBrave
+	case "Insightful":
+		return constants.PersonalityInsightful
+	case "Playful":
+		return constants.PersonalityPlayful
+	case "Rash":
+		return constants.PersonalityRash
+	default:
+		return constants.PersonalityAloof
 	}
-	return constants.PersonalityAloof
 }

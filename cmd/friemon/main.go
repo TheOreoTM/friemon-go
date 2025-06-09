@@ -11,6 +11,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/joho/godotenv"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/application/commands"
 	"github.com/theoreotm/friemon/internal/application/components"
@@ -26,9 +27,14 @@ var (
 )
 
 func main() {
-	// Parse command line flags
-	flag.Parse()
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		// Don't fail if .env doesn't exist (for production)
+		fmt.Printf("Warning: .env file not found: %v\n", err)
+	}
 
+	flag.BoolVar(&dev, "dev", false, "Enable development mode")
+	flag.Parse()
 	// Load configuration
 	cfg, err := bot.LoadConfig()
 	if err != nil {

@@ -17,21 +17,19 @@ GOVET := $(GOCMD) vet
 GOMOD := $(GOCMD) mod
 
 # Build Flags
-SYNC ?= false
-
-DEFAULT_FLAGS ?= -commit=$(GIT_COMMIT) -branch=$(GIT_BRANCH)
+DEFAULT_FLAGS := -ldflags="-X main.commit=$(GIT_COMMIT) -X main.branch=$(GIT_BRANCH)"
 
 default: build
 
 .PHONY: build
 build:
 	@echo "Building $(PROJECT_NAME)..."
-	$(GOBUILD) $(DEFAULT_FLAGS) -o bin/$(PROJECT_NAME) ./main.go
+	$(GOBUILD) $(DEFAULT_FLAGS) -o bin/$(PROJECT_NAME) ./cmd/friemon/main.go
 
 .PHONY: run
 run:
 	@echo "Running $(PROJECT_NAME)..."
-	$(GORUN) ./cmd/friemon/main.go $(DEFAULT_FLAGS)
+	$(GORUN) $(DEFAULT_FLAGS) ./cmd/friemon/main.go
 
 .PHONY: test
 test:

@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Config struct {
@@ -19,50 +21,84 @@ type Config struct {
 }
 
 func (c Config) String() string {
-	return fmt.Sprintf("Host: %s\n   Port: %d\n   Username: %s\n   Password: %s\n   Database: %s\n   SSLMode: %s",
-		c.Host,
-		c.Port,
-		c.Username,
-		strings.Repeat("*", len(c.Password)),
-		c.Database,
-		c.SSLMode,
-	)
+	return fmt.Sprintf("Host: %s, Port: %d, Database: %s, Username: %s, SSLMode: %s",
+		c.Host, c.Port, c.Database, c.Username, c.SSLMode)
 }
 
 func (c Config) PostgresDataSourceName() string {
-	return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		c.Host,
-		c.Port,
-		c.Username,
-		c.Password,
-		c.Database,
-		c.SSLMode,
-	)
+	var parts []string
+	parts = append(parts, fmt.Sprintf("host=%s", c.Host))
+	parts = append(parts, fmt.Sprintf("port=%d", c.Port))
+	parts = append(parts, fmt.Sprintf("user=%s", c.Username))
+	if c.Password != "" {
+		parts = append(parts, fmt.Sprintf("password=%s", c.Password))
+	}
+	parts = append(parts, fmt.Sprintf("dbname=%s", c.Database))
+	if c.SSLMode != "" {
+		parts = append(parts, fmt.Sprintf("sslmode=%s", c.SSLMode))
+	}
+	parts = append(parts, "TimeZone=UTC")
+	return strings.Join(parts, " ")
 }
 
-func NewDB(cfg Config) (*Queries, *pgx.Conn, error) {
-	// Parse the PostgreSQL connection configuration
-	pgCfg, err := pgx.ParseConfig(cfg.PostgresDataSourceName())
+type DB struct {
+	*gorm.DB
+}
+
+func NewDB(cfg Config) (*DB, error) {
+	gormLogger := logger.Default.LogMode(logger.Info)
+
+	db, err := gorm.Open(postgres.Open(cfg.PostgresDataSourceName()), &gorm.Config{
+		Logger: gormLogger,
+		NowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+	})
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	// Establish a connection to the PostgreSQL database
-	conn, err := pgx.ConnectConfig(context.Background(), pgCfg)
+	// Get underlying sql.DB to configure connection pool
+	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, conn, fmt.Errorf("failed to connect to database: %w", err)
+		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
 
-	// Set a timeout for pinging the database
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Configure connection pool
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
+	// Test connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Ping the database to ensure the connection is established
-	if err = conn.Ping(ctx); err != nil {
-		conn.Close(context.Background()) // Close connection on error
-		return nil, conn, fmt.Errorf("failed to ping database: %w", err)
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Return a new instance of Queries with the established connection
-	return New(conn), conn, nil
+	return &DB{DB: db}, nil
+}
+
+func (db *DB) Close() error {
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
+func (db *DB) AutoMigrate() error {
+
+	err := db.DB.AutoMigrate(&Character{})
+	if err != nil {
+		return err
+	}
+
+	err = db.DB.AutoMigrate(&User{})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
