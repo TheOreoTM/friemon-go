@@ -7,7 +7,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/internal/application/bot"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 func init() {
@@ -44,7 +44,7 @@ func handleSelect(b *bot.Bot) handler.CommandHandler {
 			return e.CreateMessage(ErrorMessage(err.Error()))
 		}
 
-		_, err = b.DB.UpdateUser(b.Context, entities.User{
+		_, err = b.DB.UpdateUser(b.Context, game.User{
 			ID:         e.Member().User.ID,
 			SelectedID: targetChar.ID,
 		})

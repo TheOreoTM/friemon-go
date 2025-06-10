@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 type Cache interface {
@@ -16,7 +16,7 @@ type Cache interface {
 	GetInteractionCount(channelId snowflake.ID) int
 	ResetInteractionCount(channelId snowflake.ID) error
 
-	SetChannelCharacter(channelID snowflake.ID, character *entities.Character) error
-	GetChannelCharacter(channelID snowflake.ID) (*entities.Character, error)
+	SetChannelCharacter(channelID snowflake.ID, character *game.Character) error
+	GetChannelCharacter(channelID snowflake.ID) (*game.Character, error)
 	DeleteChannelCharacter(channelID snowflake.ID) error
 }

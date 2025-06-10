@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 	"github.com/theoreotm/friemon/internal/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -71,7 +71,7 @@ func handleInfo(b *bot.Bot) handler.CommandHandler {
 		}()
 
 		characterIDParam := e.SlashCommandInteractionData().String("character")
-		var ch *entities.Character
+		var ch *game.Character
 		var err error
 
 		if characterIDParam != "" && characterIDParam != "-1" { // -1 might be from autocomplete placeholder

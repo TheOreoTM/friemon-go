@@ -7,7 +7,7 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/internal/application/bot"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 	"github.com/theoreotm/friemon/internal/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -66,7 +66,7 @@ func handleCharacter(b *bot.Bot) handler.CommandHandler {
 			logger.DiscordUserID(userID),
 		)
 
-		character := entities.RandomCharacterSpawn()
+		character := game.RandomCharacterSpawn()
 
 		log.Info("Random character generated",
 			logger.CharacterName(character.CharacterName()),

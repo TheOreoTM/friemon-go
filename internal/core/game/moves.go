@@ -1,4 +1,4 @@
-package entities
+package game
 
 import "github.com/theoreotm/friemon/constants"
 

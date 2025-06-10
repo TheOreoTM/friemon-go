@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/theoreotm/friemon/constants"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 var _ Store = (*DB)(nil)
@@ -28,7 +28,7 @@ func (db *DB) DeleteEverything(ctx context.Context) error {
 	return nil
 }
 
-func (db *DB) UpdateUser(ctx context.Context, user entities.User) (*entities.User, error) {
+func (db *DB) UpdateUser(ctx context.Context, user game.User) (*game.User, error) {
 	dbUser := modelUserToDBUser(user)
 
 	result := db.WithContext(ctx).Save(&dbUser)
@@ -39,7 +39,7 @@ func (db *DB) UpdateUser(ctx context.Context, user entities.User) (*entities.Use
 	return dbUserToModelUser(dbUser), nil
 }
 
-func (db *DB) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*entities.Character, error) {
+func (db *DB) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*game.Character, error) {
 	var user User
 	result := db.WithContext(ctx).Preload("SelectedChar").First(&user, "id = ?", id.String())
 	if result.Error != nil {
@@ -56,7 +56,7 @@ func (db *DB) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*entit
 	return dbCharToModelChar(*user.SelectedCharacter), nil
 }
 
-func (db *DB) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+func (db *DB) CreateUser(ctx context.Context, id snowflake.ID) (*game.User, error) {
 	dbUser := User{
 		ID:            id.String(),
 		Balance:       0,
@@ -74,7 +74,7 @@ func (db *DB) CreateUser(ctx context.Context, id snowflake.ID) (*entities.User, 
 	return dbUserToModelUser(dbUser), nil
 }
 
-func (db *DB) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, error) {
+func (db *DB) GetUser(ctx context.Context, id snowflake.ID) (*game.User, error) {
 	var user User
 	result := db.WithContext(ctx).First(&user, "id = ?", id.String())
 	if result.Error != nil {
@@ -87,7 +87,7 @@ func (db *DB) GetUser(ctx context.Context, id snowflake.ID) (*entities.User, err
 	return dbUserToModelUser(user), nil
 }
 
-func (db *DB) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
+func (db *DB) DeleteCharacter(ctx context.Context, id uuid.UUID) (*game.Character, error) {
 	var character Character
 	result := db.WithContext(ctx).First(&character, "id = ?", id)
 	if result.Error != nil {
@@ -101,7 +101,7 @@ func (db *DB) DeleteCharacter(ctx context.Context, id uuid.UUID) (*entities.Char
 	return dbCharToModelChar(character), nil
 }
 
-func (db *DB) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *entities.Character) (*entities.Character, error) {
+func (db *DB) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *game.Character) (*game.Character, error) {
 	dbChar := modelCharToDBChar(ch)
 	dbChar.ID = id
 
@@ -113,7 +113,7 @@ func (db *DB) UpdateCharacter(ctx context.Context, id uuid.UUID, ch *entities.Ch
 	return dbCharToModelChar(dbChar), nil
 }
 
-func (db *DB) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Character, error) {
+func (db *DB) GetCharacter(ctx context.Context, id uuid.UUID) (*game.Character, error) {
 	var character Character
 	result := db.WithContext(ctx).First(&character, "id = ?", id)
 	if result.Error != nil {
@@ -126,7 +126,7 @@ func (db *DB) GetCharacter(ctx context.Context, id uuid.UUID) (*entities.Charact
 	return dbCharToModelChar(character), nil
 }
 
-func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *entities.Character) error {
+func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *game.Character) error {
 	// Get the user's next idx
 	var user User
 	result := db.WithContext(ctx).First(&user, "id = ?", ownerID.String())
@@ -163,14 +163,14 @@ func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *e
 	return nil
 }
 
-func (db *DB) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]entities.Character, error) {
+func (db *DB) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]game.Character, error) {
 	var characters []Character
 	result := db.WithContext(ctx).Where("owner_id = ?", userID.String()).Order("idx ASC").Find(&characters)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 
-	modelChars := make([]entities.Character, len(characters))
+	modelChars := make([]game.Character, len(characters))
 	for i, char := range characters {
 		modelChars[i] = *dbCharToModelChar(char)
 	}
@@ -186,14 +186,14 @@ func (db *DB) Tx(ctx context.Context, fn func(Store) error) error {
 }
 
 // Conversion functions
-func dbUserToModelUser(dbUser User) *entities.User {
-	orderBy := entities.OrderBy(dbUser.OrderBy)
+func dbUserToModelUser(dbUser User) *game.User {
+	orderBy := game.OrderBy(dbUser.OrderBy)
 
-	return &entities.User{
+	return &game.User{
 		ID:         snowflake.MustParse(dbUser.ID),
 		Balance:    int(dbUser.Balance),
 		SelectedID: dbUser.SelectedID,
-		Order: entities.OrderOptions{
+		Order: game.OrderOptions{
 			OrderBy: orderBy,
 			Desc:    dbUser.OrderDesc,
 		},
@@ -202,7 +202,7 @@ func dbUserToModelUser(dbUser User) *entities.User {
 	}
 }
 
-func modelUserToDBUser(user entities.User) User {
+func modelUserToDBUser(user game.User) User {
 	return User{
 		ID:            user.ID.String(),
 		Balance:       int32(user.Balance),
@@ -214,7 +214,7 @@ func modelUserToDBUser(user entities.User) User {
 	}
 }
 
-func modelCharToDBChar(ch *entities.Character) Character {
+func modelCharToDBChar(ch *game.Character) Character {
 	return Character{
 		ID:               ch.ID,
 		UserID:           ch.OwnerID,
@@ -240,8 +240,8 @@ func modelCharToDBChar(ch *entities.Character) Character {
 	}
 }
 
-func dbCharToModelChar(dbch Character) *entities.Character {
-	return &entities.Character{
+func dbCharToModelChar(dbch Character) *game.Character {
+	return &game.Character{
 		ID:               dbch.ID,
 		OwnerID:          dbch.OwnerID,
 		ClaimedTimestamp: dbch.ClaimedTimestamp,

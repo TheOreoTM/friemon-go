@@ -8,7 +8,7 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 	"github.com/theoreotm/friemon/internal/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -90,7 +90,7 @@ func spawnCharacter(b *bot.Bot, e *events.MessageCreate) {
 	}
 
 	// Generate character
-	character := entities.RandomCharacterSpawn()
+	character := game.RandomCharacterSpawn()
 
 	log.Info("Spawning character",
 		logger.Handler("spawn"),

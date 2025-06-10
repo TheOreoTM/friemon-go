@@ -11,7 +11,7 @@ import (
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/redis/go-redis/v9"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 // RedisCache implements the Cache interface using Redis.
@@ -57,7 +57,7 @@ func (c *RedisCache) Set(key string, value interface{}, ttl time.Duration) error
 	var dataToStore []byte // Use []byte for SET command
 
 	switch v := value.(type) {
-	case *entities.Character:
+	case *game.Character:
 		jsonData, err := json.Marshal(v)
 		if err != nil {
 			return fmt.Errorf("failed to marshal character to JSON: %w", err)
@@ -96,7 +96,7 @@ func (c *RedisCache) Get(key string) (interface{}, error) {
 	// Attempt to unmarshal as *entities.Character if it's a character key
 	// This is a heuristic; a more robust system might involve type hints or specific methods.
 	if _, err := snowflake.Parse(key[len("channel:"):strings.LastIndex(key, ":")]); err == nil && strings.HasSuffix(key, ":character") {
-		var char entities.Character
+		var char game.Character
 		if jsonErr := json.Unmarshal([]byte(val), &char); jsonErr == nil {
 			return &char, nil
 		}
@@ -158,14 +158,14 @@ func (c *RedisCache) ResetInteractionCount(channelID snowflake.ID) error {
 
 // SetChannelCharacter stores a character associated with a channel.
 // The character data is marshalled to JSON and expires after 3 minutes.
-func (c *RedisCache) SetChannelCharacter(channelID snowflake.ID, character *entities.Character) error {
+func (c *RedisCache) SetChannelCharacter(channelID snowflake.ID, character *game.Character) error {
 	key := channelCharacterKey(channelID)
 	return c.Set(key, character, 3*time.Minute)
 }
 
 // GetChannelCharacter retrieves a character associated with a channel.
 // Returns nil if the key doesn't exist, is expired, or an error occurs during unmarshalling.
-func (c *RedisCache) GetChannelCharacter(channelID snowflake.ID) (*entities.Character, error) {
+func (c *RedisCache) GetChannelCharacter(channelID snowflake.ID) (*game.Character, error) {
 	key := channelCharacterKey(channelID)
 	val, err := c.client.Get(c.ctx, key).Bytes()
 	if err != nil {
@@ -175,7 +175,7 @@ func (c *RedisCache) GetChannelCharacter(channelID snowflake.ID) (*entities.Char
 		return nil, fmt.Errorf("failed to get character from Redis for channel %s: %w", channelID, err)
 	}
 
-	var character entities.Character
+	var character game.Character
 	if err := json.Unmarshal(val, &character); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal character JSON for channel %s: %w", channelID, err)
 	}

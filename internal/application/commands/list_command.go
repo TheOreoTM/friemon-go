@@ -10,7 +10,7 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 func init() {
@@ -96,7 +96,7 @@ func handlelist(b *bot.Bot) handler.CommandHandler {
 	}
 }
 
-func maxIDX(characters []entities.Character) int {
+func maxIDX(characters []game.Character) int {
 	if len(characters) == 0 {
 		return -1
 	}

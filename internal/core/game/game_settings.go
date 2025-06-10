@@ -1,4 +1,4 @@
-package entities
+package game
 
 type GameSettings struct {
 	// Turn settings

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 type memoryCache struct {
@@ -47,19 +47,19 @@ func (c *memoryCache) ResetInteractionCount(channelId snowflake.ID) error {
 	return c.Set(key, 0, 3*time.Minute)
 }
 
-func (c *memoryCache) SetChannelCharacter(channelID snowflake.ID, character *entities.Character) error {
+func (c *memoryCache) SetChannelCharacter(channelID snowflake.ID, character *game.Character) error {
 	key := "channel:" + channelID.String() + ":character"
 	return c.Set(key, character, 3*time.Minute)
 }
 
-func (c *memoryCache) GetChannelCharacter(channelID snowflake.ID) (*entities.Character, error) {
+func (c *memoryCache) GetChannelCharacter(channelID snowflake.ID) (*game.Character, error) {
 	key := "channel:" + channelID.String() + ":character"
 	value, err := c.Get(key)
 	if err != nil {
 		return nil, err
 	}
 
-	return value.(*entities.Character), nil
+	return value.(*game.Character), nil
 }
 
 func (c *memoryCache) DeleteChannelCharacter(channelID snowflake.ID) error {

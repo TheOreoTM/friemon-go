@@ -13,7 +13,7 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 	"github.com/theoreotm/friemon/internal/infrastructure/db"
 	"github.com/theoreotm/friemon/internal/infrastructure/memstore"
 	"github.com/theoreotm/friemon/internal/infrastructure/scheduler"
@@ -30,7 +30,7 @@ type Bot struct {
 	Context       context.Context
 	Redis         *redis.Client
 	Scheduler     *scheduler.Scheduler
-	BattleManager *entities.BattleManager
+	BattleManager *game.BattleManager
 }
 
 func (b *Bot) GetRestClient() tasks.RestClient {
@@ -46,7 +46,7 @@ func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 		Cfg:           cfg,
 		BuildInfo:     buildInfo,
 		Context:       ctx,
-		BattleManager: entities.NewBattleManager(),
+		BattleManager: game.NewBattleManager(),
 	}
 }
 

@@ -1,4 +1,4 @@
-package entities
+package game
 
 var CharacterSprites = map[int]string{
 	Himmel.ID:  "1305926517888516166",

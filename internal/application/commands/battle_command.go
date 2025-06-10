@@ -7,7 +7,7 @@ import (
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
-	"github.com/theoreotm/friemon/internal/core/entities"
+	"github.com/theoreotm/friemon/internal/core/game"
 )
 
 func init() {
@@ -55,7 +55,7 @@ func handleBattle(b *bot.Bot) handler.CommandHandler {
 		}
 
 		// Create the challenge
-		challenge, err := b.BattleManager.CreateChallenge(challenger.ID, challenged.ID, e.ChannelID(), entities.DefaultGameSettings())
+		challenge, err := b.BattleManager.CreateChallenge(challenger.ID, challenged.ID, e.ChannelID(), game.DefaultGameSettings())
 		if err != nil {
 			e.CreateMessage(ErrorMessage(err.Error()))
 			return nil
