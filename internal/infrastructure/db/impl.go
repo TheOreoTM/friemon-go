@@ -217,7 +217,7 @@ func modelUserToDBUser(user entities.User) User {
 func modelCharToDBChar(ch *entities.Character) Character {
 	return Character{
 		ID:               ch.ID,
-		UserID:          ch.OwnerID,
+		UserID:           ch.OwnerID,
 		ClaimedTimestamp: ch.ClaimedTimestamp,
 		IDX:              int32(ch.IDX),
 		CharacterID:      int32(ch.CharacterID),

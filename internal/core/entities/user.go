@@ -25,4 +25,5 @@ type User struct {
 	Order         OrderOptions
 	NextIdx       int
 	ShiniesCaught int
+	ELO           int
 }

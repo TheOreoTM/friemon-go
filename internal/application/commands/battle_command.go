@@ -2,14 +2,12 @@ package commands
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/theoreotm/friemon/constants"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/core/entities"
-	"github.com/theoreotm/friemon/internal/pkg/logger"
 )
 
 func init() {
@@ -19,11 +17,11 @@ func init() {
 var cmdBattle = &Command{
 	Cmd: discord.SlashCommandCreate{
 		Name:        "battle",
-		Description: "Challenge another user to a battle",
+		Description: "Challenge another user to a battle.",
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionUser{
-				Name:        "opponent",
-				Description: "The user you want to battle",
+				Name:        "user",
+				Description: "The user you want to challenge.",
 				Required:    true,
 			},
 		},
@@ -33,105 +31,56 @@ var cmdBattle = &Command{
 }
 
 func handleBattle(b *bot.Bot) handler.CommandHandler {
-	return func(event *handler.CommandEvent) error {
-		challengerID := event.User().ID
-		opponentUser, ok := event.SlashCommandInteractionData().OptUser("opponent")
+	return func(e *handler.CommandEvent) error {
+		challenger := e.User()
+		challenged := e.SlashCommandInteractionData().User("user")
 
-		if !ok {
-			return event.CreateMessage(ErrorMessage("Invalid opponent specified"))
+		if challenger.ID == challenged.ID {
+			e.CreateMessage(ErrorMessage("You cannot challenge yourself!"))
+			return nil
+		}
+		if challenged.Bot {
+			e.CreateMessage(ErrorMessage("You cannot challenge a bot!"))
+			return nil
 		}
 
-		opponentID := opponentUser.ID
-
-		// Validation checks
-		if challengerID == opponentID {
-			return event.CreateMessage(ErrorMessage("You cannot battle yourself!"))
+		// Check if either player is already in a battle
+		if _, inBattle := b.BattleManager.GetPlayerBattle(challenger.ID); inBattle {
+			e.CreateMessage(ErrorMessage("You are already in a battle!"))
+			return nil
+		}
+		if _, inBattle := b.BattleManager.GetPlayerBattle(challenged.ID); inBattle {
+			e.CreateMessage(ErrorMessage(fmt.Sprintf("%s is already in a battle!", challenged.Username)))
+			return nil
 		}
 
-		if opponentUser.Bot {
-			return event.CreateMessage(ErrorMessage("You cannot battle bots!"))
-		}
-
-		// Check if either user is already in a battle
-		existingBattle, err := b.DB.GetActiveBattleForUser(b.Context, challengerID)
-		if err == nil && existingBattle != nil {
-			return event.CreateMessage(ErrorMessage("You are already in an active battle!"))
-		}
-
-		existingBattle, err = b.DB.GetActiveBattleForUser(b.Context, opponentID)
-		if err == nil && existingBattle != nil {
-			return event.CreateMessage(ErrorMessage("That user is already in an active battle!"))
-		}
-
-		// Check if both users have enough characters
-		challengerChars, err := b.DB.GetCharactersForUser(b.Context, challengerID)
-		if err != nil || len(challengerChars) < 3 {
-			return event.CreateMessage(ErrorMessage("You need at least 3 characters to battle!"))
-		}
-
-		opponentChars, err := b.DB.GetCharactersForUser(b.Context, opponentID)
-		if err != nil || len(opponentChars) < 3 {
-			return event.CreateMessage(ErrorMessage("Your opponent needs at least 3 characters to battle!"))
-		}
-
-		// Get default game settings
-		settings, err := b.DB.GetGameSettings(b.Context)
+		// Create the challenge
+		challenge, err := b.BattleManager.CreateChallenge(challenger.ID, challenged.ID, e.ChannelID(), entities.DefaultGameSettings())
 		if err != nil {
-			logger.Error("Failed to get game settings", logger.ErrorField(err))
-			// Use defaults
-			settings = entities.GameSettings{
-				TurnLimit:          25,
-				TurnTimeoutSeconds: 60,
-				SwitchCostsTurn:    false,
-				MaxTeamSize:        3,
-			}
+			e.CreateMessage(ErrorMessage(err.Error()))
+			return nil
 		}
 
-		// Create battle challenge
-		battle := entities.NewBattle(challengerID, opponentID, settings)
-
-		// Save to database
-		err = b.DB.CreateBattle(b.Context, battle)
-		if err != nil {
-			logger.Error("Failed to create battle", logger.ErrorField(err))
-			return event.CreateMessage(ErrorMessage("Failed to create battle. Please try again."))
-		}
-
-		// Create challenge embed
+		// Send challenge embed
 		embed := discord.NewEmbedBuilder().
 			SetTitle("⚔️ Battle Challenge!").
-			SetDescription(fmt.Sprintf("%s has challenged %s to a battle!",
-				event.User().Mention(), opponentUser.Mention())).
+			SetDescription(fmt.Sprintf("%s has challenged %s to a battle!", challenger.Mention(), challenged.Mention())).
 			SetColor(constants.ColorInfo).
-			AddField("Battle Settings", fmt.Sprintf(
-				"• Turn Limit: %d\n• Turn Timeout: %d seconds\n• Switch Costs Turn: %t",
-				settings.TurnLimit, settings.TurnTimeoutSeconds, settings.SwitchCostsTurn), false).
-			SetFooter("The challenge will expire in 2 minutes", "").
-			SetTimestamp(time.Now()).
+			AddField("Rules", "3v3, Level 100", true).
+			AddField("Expires", discord.TimestampStyleRelative.Format(int64(challenge.ExpiresAt.Second())), true).
 			Build()
 
-		components := []discord.ContainerComponent{
-			discord.NewActionRow(
-				discord.NewPrimaryButton("Accept Battle", fmt.Sprintf("battle_accept_%s", battle.ID.String())),
-				discord.NewDangerButton("Decline Battle", fmt.Sprintf("battle_decline_%s", battle.ID.String())),
-			),
-		}
+		components := discord.NewActionRow(
+			discord.NewSuccessButton("Accept", fmt.Sprintf("battle_challenge_accept:%s", challenge.ID)),
+			discord.NewDangerButton("Decline", fmt.Sprintf("battle_challenge_decline:%s", challenge.ID)),
+		)
 
-		response := discord.NewMessageCreateBuilder().
-			SetEmbeds(embed).
-			SetContainerComponents(components...).
-			Build()
+		e.CreateMessage(discord.MessageCreate{
+			Embeds:     []discord.Embed{embed},
+			Components: []discord.ContainerComponent{components},
+		})
 
-		// Schedule timeout for challenge
-		_, err = b.Scheduler.After(2*time.Minute).
-			Type("battle_timeout").
-			With("battle_id", battle.ID.String()).
-			Execute("battle_timeout")
-
-		if err != nil {
-			logger.Warn("Failed to schedule battle timeout", logger.ErrorField(err))
-		}
-
-		return event.CreateMessage(response)
+		return nil
 	}
+
 }

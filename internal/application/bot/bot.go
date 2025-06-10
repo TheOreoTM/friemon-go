@@ -13,6 +13,7 @@ import (
 	"github.com/disgoorg/paginator"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/theoreotm/friemon/internal/core/entities"
 	"github.com/theoreotm/friemon/internal/infrastructure/db"
 	"github.com/theoreotm/friemon/internal/infrastructure/memstore"
 	"github.com/theoreotm/friemon/internal/infrastructure/scheduler"
@@ -20,15 +21,16 @@ import (
 )
 
 type Bot struct {
-	Cfg       Config
-	Client    dbot.Client
-	Paginator *paginator.Manager
-	DB        *db.DB
-	Cache     memstore.Cache
-	BuildInfo BuildInfo
-	Context   context.Context
-	Redis     *redis.Client
-	Scheduler *scheduler.Scheduler
+	Cfg           Config
+	Client        dbot.Client
+	Paginator     *paginator.Manager
+	DB            *db.DB
+	Cache         memstore.Cache
+	BuildInfo     BuildInfo
+	Context       context.Context
+	Redis         *redis.Client
+	Scheduler     *scheduler.Scheduler
+	BattleManager *entities.BattleManager
 }
 
 func (b *Bot) GetRestClient() tasks.RestClient {
@@ -41,9 +43,10 @@ func (b *Bot) GetCache() tasks.CacheClient {
 
 func New(cfg Config, buildInfo BuildInfo, ctx context.Context) *Bot {
 	return &Bot{
-		Cfg:       cfg,
-		BuildInfo: buildInfo,
-		Context:   ctx,
+		Cfg:           cfg,
+		BuildInfo:     buildInfo,
+		Context:       ctx,
+		BattleManager: entities.NewBattleManager(),
 	}
 }
 

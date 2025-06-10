@@ -50,6 +50,7 @@ type User struct {
 	OrderDesc     bool      `gorm:"not null;default:false" json:"order_desc"`
 	ShiniesCaught int32     `gorm:"not null;default:0" json:"shinies_caught"`
 	NextIdx       int32     `gorm:"not null;default:1" json:"next_idx"`
+	ELO           int32     `gorm:"not null;default:1000" json:"elo"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
