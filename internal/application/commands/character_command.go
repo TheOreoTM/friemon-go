@@ -28,6 +28,7 @@ var cmdCharacter = &Command{
 func HandleCharacter(b *bot.Bot) handler.CommandHandler {
 	// Create a logger for this command
 	log := logger.NewLogger("commands.character")
+	fmt.Println("Hi")
 
 	return func(e *handler.CommandEvent) error {
 		start := time.Now()
