@@ -80,6 +80,11 @@ func main() {
 	b := bot.New(*cfg, buildInfo, ctx)
 	r := handler.New()
 
+	// Setup bot with event listeners
+	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
+		log.Fatal("Failed to setup bot", logger.ErrorField(err))
+	}
+
 	r.Use(middleware.Logger)
 	r.Group(func(router handler.Router) {
 		r.Use(middleware.Print("companion"))
@@ -95,23 +100,7 @@ func main() {
 		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
 	})
 
-	// Setup bot with event listeners
-	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
-		log.Fatal("Failed to setup bot", logger.ErrorField(err))
-	}
-
-	// Setup command and component handlers
 	h := handler.New()
-	for _, cmd := range commands.Commands {
-		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
-		if cmd.Autocomplete != nil {
-			h.Autocomplete(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Autocomplete(b))
-		}
-	}
-
-	for name, comp := range components.Components {
-		h.Component(name, comp(b))
-	}
 
 	b.Client.AddEventListeners(h)
 
