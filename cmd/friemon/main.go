@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/joho/godotenv"
@@ -80,11 +81,6 @@ func main() {
 	b := bot.New(*cfg, buildInfo, ctx)
 	r := handler.New()
 
-	// Setup bot with event listeners
-	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
-		log.Fatal("Failed to setup bot", logger.ErrorField(err))
-	}
-
 	r.Use(middleware.Logger)
 	r.Group(func(router handler.Router) {
 		r.Use(middleware.Print("companion"))
@@ -100,9 +96,21 @@ func main() {
 		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
 	})
 
-	h := handler.New()
+	b.Client.AddEventListeners(r)
 
-	b.Client.AddEventListeners(h)
+	var cmds []discord.ApplicationCommandCreate
+	for _, cmd := range commands.Commands {
+		cmds = append(cmds, cmd.Cmd)
+	}
+	if err = handler.SyncCommands(b.Client, cmds, b.Cfg.Bot.DevGuilds); err != nil {
+		log.Error("error while syncing commands", zap.Any("err", err))
+		return
+	}
+
+	// Setup bot with event listeners
+	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
+		log.Fatal("Failed to setup bot", logger.ErrorField(err))
+	}
 
 	// Connect to Discord
 	if err := b.Client.OpenGateway(ctx); err != nil {
