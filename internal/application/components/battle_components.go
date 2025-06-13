@@ -22,6 +22,7 @@ func handleChallengeAccept(b *bot.Bot) handler.ComponentHandler {
 	return func(e *handler.ComponentEvent) error {
 		challengeIDStr := strings.Split(e.Data.CustomID(), ":")[1]
 		challengeID, err := uuid.Parse(challengeIDStr)
+		fmt.Printf("Challenge ID: %s\n", challengeID)
 		if err != nil {
 			e.CreateMessage(discord.MessageCreate{Content: "Invalid challenge ID.", Flags: discord.MessageFlagEphemeral})
 			return err
