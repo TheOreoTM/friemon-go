@@ -36,7 +36,7 @@ type Character struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
 	// Relationships
-	Owner *User `gorm:"foreignKey:OwnerID;references:ID" json:"owner,omitempty"`
+	UserID string `json:"user_id"`
 }
 
 func (Character) TableName() string {
