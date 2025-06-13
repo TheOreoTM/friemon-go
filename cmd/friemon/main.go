@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/joho/godotenv"
@@ -86,19 +88,21 @@ func main() {
 	}
 
 	r.Use(middleware.Logger)
-	r.Group(func(router handler.Router) {
-		r.Use(middleware.Print("companion"))
-		r.Command("/character", commands.HandleCharacter(b))
-		r.Command("/info", commands.HandleInfo(b))
-		r.Command("/list", commands.HandleList(b))
-	})
+	r.Command("/character", commands.HandleCharacter(b))
+	r.Command("/info", commands.HandleInfo(b))
+	r.Command("/list", commands.HandleList(b))
+	r.Command("/battle", commands.HandleBattle(b))
+	r.Component("/battle_challenge_accept/{challenge_id}", components.HandleChallengeAccept(b))
+	r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
 
-	r.Group(func(router handler.Router) {
-		r.Use(middleware.Print("battle"))
-		r.Command("/battle", commands.HandleBattle(b))
-		r.Component("/battle_challenge_accept/{challenge_id}", components.HandleChallengeAccept(b))
-		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
-	})
+	var applicationCmds []discord.ApplicationCommandCreate
+	for _, cmd := range commands.Commands {
+		applicationCmds = append(applicationCmds, cmd.Cmd)
+	}
+
+	if _, err := b.Client.Rest().SetGlobalCommands(b.Client.ApplicationID(), applicationCmds); err != nil {
+		slog.Error("error while registering global commands", slog.Any("err", err))
+	}
 
 	// Connect to Discord
 	if err := b.Client.OpenGateway(ctx); err != nil {
