@@ -11,6 +11,7 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
+	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/joho/godotenv"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/application/commands"
@@ -78,7 +79,22 @@ func main() {
 
 	// Create bot instance
 	b := bot.New(*cfg, buildInfo, ctx)
+	r := handler.New()
 
+	r.Use(middleware.Logger)
+	r.Group(func(router handler.Router) {
+		r.Use(middleware.Print("companion"))
+		r.Command("/character", commands.HandleCharacter(b))
+		r.Command("/info", commands.HandleInfo(b))
+		r.Command("/list", commands.HandleList(b))
+	})
+
+	r.Group(func(router handler.Router) {
+		r.Use(middleware.Print("battle"))
+		r.Command("/battle", commands.HandleBattle(b))
+		r.Component("/battle_challenge_accept/{challenge_id}", components.HandleChallengeAccept(b))
+		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
+	})
 	// Prepare command list
 	var cmds []discord.ApplicationCommandCreate
 	for _, cmd := range commands.Commands {

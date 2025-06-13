@@ -26,11 +26,11 @@ var cmdBattle = &Command{
 			},
 		},
 	},
-	Handler:  handleBattle,
+	Handler:  HandleBattle,
 	Category: "Battle",
 }
 
-func handleBattle(b *bot.Bot) handler.CommandHandler {
+func HandleBattle(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		challenger := e.User()
 		challenged := e.SlashCommandInteractionData().User("user")

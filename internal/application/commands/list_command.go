@@ -33,11 +33,11 @@ var cmdList = &Command{
 			},
 		},
 	},
-	Handler:  handlelist,
+	Handler:  HandleList,
 	Category: "Friemon",
 }
 
-func handlelist(b *bot.Bot) handler.CommandHandler {
+func HandleList(b *bot.Bot) handler.CommandHandler {
 	return func(e *handler.CommandEvent) error {
 		characters, err := b.DB.GetCharactersForUser(e.Ctx, e.Member().User.ID)
 		if err != nil {

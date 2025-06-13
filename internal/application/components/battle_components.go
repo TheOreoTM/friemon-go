@@ -13,13 +13,16 @@ import (
 )
 
 func init() {
-	Components["/battle_challenge_accept"] = handleChallengeAccept
-	Components["/battle_challenge_decline"] = handleChallengeDecline
+	Components["/battle_challenge_accept"] = HandleChallengeAccept
+	Components["/battle_challenge_decline"] = HandleChallengeDecline
 	// We will add more handlers here as we create them
 }
 
-func handleChallengeAccept(b *bot.Bot) handler.ComponentHandler {
+func HandleChallengeAccept(b *bot.Bot) handler.ComponentHandler {
 	return func(e *handler.ComponentEvent) error {
+		data := e.Vars["data"]
+		fmt.Print(data)
+
 		challengeIDStr := strings.Split(e.Data.CustomID(), ":")[1]
 		challengeID, err := uuid.Parse(challengeIDStr)
 		fmt.Printf("Challenge ID: %s\n", challengeID)
@@ -86,7 +89,7 @@ func handleChallengeAccept(b *bot.Bot) handler.ComponentHandler {
 	}
 }
 
-func handleChallengeDecline(b *bot.Bot) handler.ComponentHandler {
+func HandleChallengeDecline(b *bot.Bot) handler.ComponentHandler {
 	return func(e *handler.ComponentEvent) error {
 		// Similar logic to accept, but decline the challenge
 		challengeIDStr := strings.Split(e.Data.CustomID(), ":")[1]

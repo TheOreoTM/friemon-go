@@ -34,11 +34,11 @@ var cmdInfo = &Command{
 		},
 	},
 	Autocomplete: handleGetCharacterAutocomplete,
-	Handler:      handleInfo,
+	Handler:      HandleInfo,
 	Category:     "Friemon",
 }
 
-func handleInfo(b *bot.Bot) handler.CommandHandler {
+func HandleInfo(b *bot.Bot) handler.CommandHandler {
 	log := logger.NewLogger("commands.info") // Create a logger for this command
 
 	return func(e *handler.CommandEvent) error {

@@ -21,11 +21,11 @@ var cmdCharacter = &Command{
 		Name:        "character",
 		Description: "Generate a random character",
 	},
-	Handler:  handleCharacter,
+	Handler:  HandleCharacter,
 	Category: "Friemon",
 }
 
-func handleCharacter(b *bot.Bot) handler.CommandHandler {
+func HandleCharacter(b *bot.Bot) handler.CommandHandler {
 	// Create a logger for this command
 	log := logger.NewLogger("commands.character")
 
