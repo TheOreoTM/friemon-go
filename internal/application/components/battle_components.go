@@ -21,9 +21,9 @@ func init() {
 func HandleChallengeAccept(b *bot.Bot) handler.ComponentHandler {
 	return func(e *handler.ComponentEvent) error {
 		data := e.Vars["challenge_id"]
-		fmt.Print(data)
+		fmt.Printf("Challenge ID: %s\n", data)
 
-		challengeIDStr := strings.SplitN(data, "/", 2)[1]
+		challengeIDStr := strings.SplitN(e.Data.CustomID(), "/", 2)[1]
 		challengeID, err := uuid.Parse(challengeIDStr)
 		fmt.Printf("Challenge ID: %s\n", challengeID)
 		if err != nil {
