@@ -67,7 +67,7 @@ func handleBattle(b *bot.Bot) handler.CommandHandler {
 			SetDescription(fmt.Sprintf("%s has challenged %s to a battle!", challenger.Mention(), challenged.Mention())).
 			SetColor(constants.ColorInfo).
 			AddField("Rules", "3v3, Level 100", true).
-			AddField("Expires", discord.TimestampStyleRelative.Format(int64(challenge.ExpiresAt.Second())), true).
+			AddField("Expires", discord.TimestampStyleRelative.Format(challenge.ExpiresAt.UnixMilli()), true).
 			Build()
 
 		components := discord.NewActionRow(
