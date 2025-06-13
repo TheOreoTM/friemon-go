@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
-	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/joho/godotenv"
 	"github.com/theoreotm/friemon/internal/application/bot"
 	"github.com/theoreotm/friemon/internal/application/commands"
@@ -80,30 +78,32 @@ func main() {
 
 	// Create bot instance
 	b := bot.New(*cfg, buildInfo, ctx)
-	r := handler.New()
+
+	// Prepare command list
+	var cmds []discord.ApplicationCommandCreate
+	for _, cmd := range commands.Commands {
+		cmds = append(cmds, cmd.Cmd)
+	}
 
 	// Setup bot with event listeners
 	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
 		log.Fatal("Failed to setup bot", logger.ErrorField(err))
 	}
 
-	r.Use(middleware.Logger)
-	r.Command("/character", commands.HandleCharacter(b))
-	r.Command("/info", commands.HandleInfo(b))
-	r.Command("/list", commands.HandleList(b))
-	r.Command("/battle", commands.HandleBattle(b))
-	r.Component("/battle_challenge_accept/{challenge_id}", components.HandleChallengeAccept(b))
-	r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
-
-	var applicationCmds []discord.ApplicationCommandCreate
+	// Setup command and component handlers
+	h := handler.New()
 	for _, cmd := range commands.Commands {
-		applicationCmds = append(applicationCmds, cmd.Cmd)
+		h.Command(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Handler(b))
+		if cmd.Autocomplete != nil {
+			h.Autocomplete(fmt.Sprintf("/%s", cmd.Cmd.CommandName()), cmd.Autocomplete(b))
+		}
 	}
 
-	if _, err := b.Client.Rest().SetGlobalCommands(b.Client.ApplicationID(), applicationCmds); err != nil {
-		slog.Error("error while registering global commands", slog.Any("err", err))
+	for name, comp := range components.Components {
+		h.Component(name, comp(b))
 	}
-	slog.Info("registered global commands", slog.Any("commands", applicationCmds))
+
+	b.Client.AddEventListeners(h)
 
 	// Connect to Discord
 	if err := b.Client.OpenGateway(ctx); err != nil {
@@ -111,6 +111,19 @@ func main() {
 	}
 
 	log.Info("Bot connected successfully", logger.Component("main"))
+
+	// Sync commands if enabled
+	if cfg.Bot.SyncCommands {
+		log.Info("Syncing commands...", logger.Component("main"))
+		if _, err := b.Client.Rest().SetGlobalCommands(b.Client.ApplicationID(), cmds); err != nil {
+			log.Error("Failed to sync commands", logger.ErrorField(err))
+		} else {
+			log.Info("Commands synced successfully",
+				logger.Component("main"),
+				zap.Int("command_count", len(cmds)),
+			)
+		}
+	}
 
 	// Wait for interrupt signal
 	s := make(chan os.Signal, 1)
