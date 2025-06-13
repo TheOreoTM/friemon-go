@@ -96,14 +96,14 @@ func main() {
 		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
 	})
 
-	b.Client.AddEventListeners(r)
+	b.Client.AddEventListeners(handlers.OnMessage(b))
 
 	var cmds []discord.ApplicationCommandCreate
 	for _, cmd := range commands.Commands {
 		cmds = append(cmds, cmd.Cmd)
 	}
 	if err = handler.SyncCommands(b.Client, cmds, b.Cfg.Bot.DevGuilds); err != nil {
-		log.Error("error while syncing commands", zap.Any("err", err))
+		log.Error("error while syncing commands", logger.ErrorField(err))
 		return
 	}
 
