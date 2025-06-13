@@ -71,8 +71,8 @@ func HandleBattle(b *bot.Bot) handler.CommandHandler {
 			Build()
 
 		components := discord.NewActionRow(
-			discord.NewSuccessButton("Accept", fmt.Sprintf("battle_challenge_accept:%s", challenge.ID)),
-			discord.NewDangerButton("Decline", fmt.Sprintf("battle_challenge_decline:%s", challenge.ID)),
+			discord.NewSuccessButton("Accept", fmt.Sprintf("battle_challenge_accept/%s", challenge.ID)),
+			discord.NewDangerButton("Decline", fmt.Sprintf("battle_challenge_decline/%s", challenge.ID)),
 		)
 
 		e.CreateMessage(discord.MessageCreate{
