@@ -8,6 +8,7 @@ import (
 )
 
 type Character struct {
+	gorm.Model
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	OwnerID          string    `gorm:"type:varchar(255);not null;index" json:"owner_id"`
 	ClaimedTimestamp time.Time `gorm:"not null;default:CURRENT_TIMESTAMP" json:"claimed_timestamp"`
@@ -35,7 +36,7 @@ type Character struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
 	// Relationships
-	UserID string `json:"user_id"`
+	Owner *User `gorm:"foreignKey:OwnerID;references:ID" json:"owner,omitempty"`
 }
 
 func (Character) TableName() string {
@@ -43,6 +44,7 @@ func (Character) TableName() string {
 }
 
 type User struct {
+	gorm.Model
 	ID            string    `gorm:"type:varchar(255);primaryKey" json:"id"`
 	Balance       int32     `gorm:"not null;default:0" json:"balance"`
 	SelectedID    uuid.UUID `gorm:"type:uuid;default:null" json:"selected_id"`

@@ -41,7 +41,7 @@ func (db *DB) UpdateUser(ctx context.Context, user game.User) (*game.User, error
 
 func (db *DB) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*game.Character, error) {
 	var user User
-	result := db.WithContext(ctx).Preload("SelectedChar").First(&user, "id = ?", id.String())
+	result := db.WithContext(ctx).Model(&user).Preload("SelectedCharacter").First(&user)
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -231,7 +231,7 @@ func modelUserToDBUser(user game.User) User {
 func modelCharToDBChar(ch *game.Character) Character {
 	return Character{
 		ID:               ch.ID,
-		UserID:           ch.OwnerID,
+		OwnerID:          ch.OwnerID,
 		ClaimedTimestamp: ch.ClaimedTimestamp,
 		IDX:              int32(ch.IDX),
 		CharacterID:      int32(ch.CharacterID),
