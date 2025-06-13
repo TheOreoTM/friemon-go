@@ -80,6 +80,11 @@ func main() {
 	b := bot.New(*cfg, buildInfo, ctx)
 	r := handler.New()
 
+	// Setup bot with event listeners
+	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
+		log.Fatal("Failed to setup bot", logger.ErrorField(err))
+	}
+
 	r.Use(middleware.Logger)
 	r.Group(func(router handler.Router) {
 		r.Use(middleware.Print("companion"))
@@ -94,13 +99,6 @@ func main() {
 		r.Component("/battle_challenge_accept/{challenge_id}", components.HandleChallengeAccept(b))
 		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
 	})
-
-	b.Client.AddEventListeners(r)
-
-	// Setup bot with event listeners
-	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
-		log.Fatal("Failed to setup bot", logger.ErrorField(err))
-	}
 
 	// Connect to Discord
 	if err := b.Client.OpenGateway(ctx); err != nil {
