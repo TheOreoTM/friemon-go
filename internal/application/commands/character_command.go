@@ -87,7 +87,16 @@ func handleCharacter(b *bot.Bot) handler.CommandHandler {
 			SetColor(int(character.Color)).
 			Build()
 
-		err := b.DB.CreateCharacter(e.Ctx, userID, character)
+		user, err := b.DB.EnsureUser(e.Ctx, userID)
+		if err != nil {
+			log.Error("Failed to get or create user",
+				logger.DiscordUserID(userID),
+				logger.ErrorField(err),
+			)
+			return e.CreateMessage(ErrorMessage("Failed to get or create user!"))
+		}
+
+		err = b.DB.CreateCharacter(e.Ctx, user.ID, character)
 		if err != nil {
 			log.Error("Failed to create character",
 				logger.DiscordUserID(userID),

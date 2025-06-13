@@ -87,6 +87,19 @@ func (db *DB) GetUser(ctx context.Context, id snowflake.ID) (*game.User, error) 
 	return dbUserToModelUser(user), nil
 }
 
+func (db *DB) EnsureUser(ctx context.Context, id snowflake.ID) (*game.User, error) {
+	var user User
+	result := db.WithContext(ctx).First(&user, "id = ?", id.String())
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return db.CreateUser(ctx, id)
+		}
+		return nil, result.Error
+	}
+
+	return dbUserToModelUser(user), nil
+}
+
 func (db *DB) DeleteCharacter(ctx context.Context, id uuid.UUID) (*game.Character, error) {
 	var character Character
 	result := db.WithContext(ctx).First(&character, "id = ?", id)
@@ -129,9 +142,10 @@ func (db *DB) GetCharacter(ctx context.Context, id uuid.UUID) (*game.Character, 
 func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *game.Character) error {
 	// Get the user's next idx
 	var user User
-	result := db.WithContext(ctx).First(&user, "id = ?", ownerID.String())
+	result := db.WithContext(ctx).First(&user, "id = ?", ownerID)
 	if result.Error != nil {
 		return result.Error
+
 	}
 
 	char.IDX = int(user.NextIdx)
