@@ -12,7 +12,7 @@ type Character struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	OwnerID          string    `gorm:"type:varchar(255);not null;index" json:"owner_id"`
 	ClaimedTimestamp time.Time `gorm:"not null;default:CURRENT_TIMESTAMP" json:"claimed_timestamp"`
-	IDX              int32     `gorm:"not null" json:"idx"`
+	IDX              int32     `gorm:"not null;column:idx" json:"idx"`
 	CharacterID      int32     `gorm:"not null" json:"character_id"`
 	Level            int32     `gorm:"not null;default:1" json:"level"`
 	XP               int32     `gorm:"not null;default:0" json:"xp"`
