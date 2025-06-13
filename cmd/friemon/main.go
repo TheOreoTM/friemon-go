@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/handler"
 	"github.com/disgoorg/disgo/handler/middleware"
 	"github.com/joho/godotenv"
@@ -95,11 +94,6 @@ func main() {
 		r.Component("/battle_challenge_accept/{challenge_id}", components.HandleChallengeAccept(b))
 		r.Component("/battle_challenge_decline/{challenge_id}", components.HandleChallengeDecline(b))
 	})
-	// Prepare command list
-	var cmds []discord.ApplicationCommandCreate
-	for _, cmd := range commands.Commands {
-		cmds = append(cmds, cmd.Cmd)
-	}
 
 	// Setup bot with event listeners
 	if err := b.SetupBot(handlers.OnMessage(b)); err != nil {
@@ -127,19 +121,6 @@ func main() {
 	}
 
 	log.Info("Bot connected successfully", logger.Component("main"))
-
-	// Sync commands if enabled
-	if cfg.Bot.SyncCommands {
-		log.Info("Syncing commands...", logger.Component("main"))
-		if _, err := b.Client.Rest().SetGlobalCommands(b.Client.ApplicationID(), cmds); err != nil {
-			log.Error("Failed to sync commands", logger.ErrorField(err))
-		} else {
-			log.Info("Commands synced successfully",
-				logger.Component("main"),
-				zap.Int("command_count", len(cmds)),
-			)
-		}
-	}
 
 	// Wait for interrupt signal
 	s := make(chan os.Signal, 1)
