@@ -103,6 +103,7 @@ func main() {
 	if _, err := b.Client.Rest().SetGlobalCommands(b.Client.ApplicationID(), applicationCmds); err != nil {
 		slog.Error("error while registering global commands", slog.Any("err", err))
 	}
+	slog.Info("registered global commands", slog.Any("commands", applicationCmds))
 
 	// Connect to Discord
 	if err := b.Client.OpenGateway(ctx); err != nil {
