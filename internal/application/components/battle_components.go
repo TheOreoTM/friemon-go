@@ -20,10 +20,10 @@ func init() {
 
 func HandleChallengeAccept(b *bot.Bot) handler.ComponentHandler {
 	return func(e *handler.ComponentEvent) error {
-		data := e.Vars["data"]
+		data := e.Vars["challenge_id"]
 		fmt.Print(data)
 
-		challengeIDStr := strings.Split(e.Data.CustomID(), ":")[1]
+		challengeIDStr := strings.SplitN(data, "/", 2)[1]
 		challengeID, err := uuid.Parse(challengeIDStr)
 		fmt.Printf("Challenge ID: %s\n", challengeID)
 		if err != nil {
