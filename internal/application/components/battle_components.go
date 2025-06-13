@@ -13,8 +13,8 @@ import (
 )
 
 func init() {
-	Components["battle_challenge_accept"] = handleChallengeAccept
-	Components["battle_challenge_decline"] = handleChallengeDecline
+	Components["/battle_challenge_accept"] = handleChallengeAccept
+	Components["/battle_challenge_decline"] = handleChallengeDecline
 	// We will add more handlers here as we create them
 }
 
