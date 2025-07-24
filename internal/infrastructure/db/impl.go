@@ -173,8 +173,8 @@ func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *g
 		return Character{}, err
 	}
 
-	// Update user's next idx
-	if err := tx.Model(&user).Update("next_idx", user.NextIdx+1).Error; err != nil {
+	// Update user's next idx explicitly by ID
+	if err := tx.Model(&User{}).Where("id = ?", ownerID.String()).Update("next_idx", user.NextIdx+1).Error; err != nil {
 		tx.Rollback()
 		return Character{}, err
 	}
