@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/google/uuid"
@@ -41,16 +42,17 @@ func (db *DB) UpdateUser(ctx context.Context, user game.User) (*game.User, error
 
 func (db *DB) GetSelectedCharacter(ctx context.Context, id snowflake.ID) (*game.Character, error) {
 	var user User
-	result := db.WithContext(ctx).Model(&user).Preload("SelectedCharacter").First(&user)
+	result := db.WithContext(ctx).Preload("SelectedCharacter").First(&user, "id = ?", id.String())
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, fmt.Errorf("user with ID %s not found", id.String())
 		}
 		return nil, result.Error
 	}
 
+	// Check if the user has a selected character
 	if user.SelectedCharacter == nil {
-		return nil, nil
+		return nil, fmt.Errorf("user with ID %s has no selected character", id.String())
 	}
 
 	return dbCharToModelChar(*user.SelectedCharacter), nil
@@ -64,6 +66,7 @@ func (db *DB) CreateUser(ctx context.Context, id snowflake.ID) (*game.User, erro
 		OrderDesc:     false,
 		ShiniesCaught: 0,
 		NextIdx:       1,
+		ELO:           1000, // Default ELO value
 	}
 
 	result := db.WithContext(ctx).Create(&dbUser)
@@ -139,15 +142,23 @@ func (db *DB) GetCharacter(ctx context.Context, id uuid.UUID) (*game.Character, 
 	return dbCharToModelChar(character), nil
 }
 
-func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *game.Character) error {
+func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *game.Character) (Character, error) {
 	// Get the user's next idx
 	var user User
-	result := db.WithContext(ctx).First(&user, "id = ?", ownerID)
+	result := db.WithContext(ctx).First(&user, "id = ?", ownerID.String())
 	if result.Error != nil {
-		return result.Error
-
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return Character{}, fmt.Errorf("user with ID %s not found", ownerID.String())
+		}
+		return Character{}, result.Error
 	}
 
+	// Ensure NextIdx is valid
+	if user.NextIdx <= 0 {
+		return Character{}, fmt.Errorf("invalid NextIdx for user with ID %s", ownerID.String())
+	}
+
+	// Assign IDX and OwnerID to the character
 	char.IDX = int(user.NextIdx)
 	char.OwnerID = ownerID.String()
 
@@ -159,37 +170,35 @@ func (db *DB) CreateCharacter(ctx context.Context, ownerID snowflake.ID, char *g
 	// Create the character
 	if err := tx.Create(&dbChar).Error; err != nil {
 		tx.Rollback()
-		return err
+		return Character{}, err
 	}
 
 	// Update user's next idx
 	if err := tx.Model(&user).Update("next_idx", user.NextIdx+1).Error; err != nil {
 		tx.Rollback()
-		return err
+		return Character{}, err
 	}
 
 	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
-		return err
+		return Character{}, err
 	}
 
+	// Assign the generated ID back to the character
 	char.ID = dbChar.ID
-	return nil
+	return dbChar, nil
 }
 
 func (db *DB) GetCharactersForUser(ctx context.Context, userID snowflake.ID) ([]game.Character, error) {
 	var characters []Character
-	result := db.WithContext(ctx).Where("owner_id = ?", userID.String()).Order("idx ASC").Find(&characters)
-	if result.Error != nil {
-		return nil, result.Error
-	}
+	err := db.WithContext(ctx).Where("owner_id = ?", userID).Find(&characters).Error
 
 	modelChars := make([]game.Character, len(characters))
 	for i, char := range characters {
 		modelChars[i] = *dbCharToModelChar(char)
 	}
 
-	return modelChars, nil
+	return modelChars, err
 }
 
 func (db *DB) Tx(ctx context.Context, fn func(Store) error) error {

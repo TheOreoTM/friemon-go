@@ -9,8 +9,8 @@ import (
 
 type Character struct {
 	gorm.Model
-	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	OwnerID          string    `gorm:"type:varchar(255);not null;index" json:"owner_id"`
+	ID               uuid.UUID `gorm:"type:uuid;primaryKey;index;default:gen_random_uuid()" json:"id"`
+	OwnerID          string    `gorm:"type:varchar(255);not null;index" json:"owner_id"` // Foreign key to User
 	ClaimedTimestamp time.Time `gorm:"not null;default:CURRENT_TIMESTAMP" json:"claimed_timestamp"`
 	IDX              int32     `gorm:"not null;column:idx" json:"idx"`
 	CharacterID      int32     `gorm:"not null" json:"character_id"`
@@ -31,12 +31,12 @@ type Character struct {
 	Moves            []int32   `gorm:"type:integer[]" json:"moves"`
 	Color            int32     `gorm:"not null" json:"color"`
 
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	CreatedAt time.Time      `json:"created_at gorm:autoCreateTime"`
+	UpdatedAt time.Time      `json:"updated_at gorm:autoUpdateTime:milli"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
 	// Relationships
-	UserID string `json:"user_id"`
+	UserID string `gorm:"type:varchar(255);not null" json:"user_id"` // Foreign key to User
 }
 
 func (Character) TableName() string {
@@ -47,7 +47,7 @@ type User struct {
 	gorm.Model
 	ID            string    `gorm:"type:varchar(255);primaryKey" json:"id"`
 	Balance       int32     `gorm:"not null;default:0" json:"balance"`
-	SelectedID    uuid.UUID `gorm:"type:uuid;default:null" json:"selected_id"`
+	SelectedID    uuid.UUID `gorm:"type:uuid;default:null" json:"selected_id"` // Foreign key to Character.ID
 	OrderBy       int32     `gorm:"not null;default:0" json:"order_by"`
 	OrderDesc     bool      `gorm:"not null;default:false" json:"order_desc"`
 	ShiniesCaught int32     `gorm:"not null;default:0" json:"shinies_caught"`
@@ -59,8 +59,8 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
 	// Relationships
-	SelectedCharacter *Character  `json:"selected_character,omitempty"`
-	Characters        []Character `json:"characters,omitempty"`
+	Characters        []Character `gorm:"foreignKey:OwnerID;references:ID" json:"characters,omitempty"`                                                          // One-to-Many
+	SelectedCharacter *Character  `gorm:"foreignKey:SelectedID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"selected_character,omitempty"` // One-to-One
 }
 
 func (User) TableName() string {

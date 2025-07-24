@@ -12,7 +12,7 @@ type Store interface {
 	// Character operations
 	GetCharactersForUser(context.Context, snowflake.ID) ([]game.Character, error)
 	GetCharacter(context.Context, uuid.UUID) (*game.Character, error)
-	CreateCharacter(context.Context, snowflake.ID, *game.Character) error
+	CreateCharacter(context.Context, snowflake.ID, *game.Character) (Character, error)
 	UpdateCharacter(context.Context, uuid.UUID, *game.Character) (*game.Character, error)
 	DeleteCharacter(context.Context, uuid.UUID) (*game.Character, error)
 

@@ -53,6 +53,7 @@ func NewDB(cfg Config) (*DB, error) {
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
+		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -90,12 +91,7 @@ func (db *DB) Close() error {
 
 func (db *DB) AutoMigrate() error {
 
-	err := db.DB.AutoMigrate(&Character{})
-	if err != nil {
-		return err
-	}
-
-	err = db.DB.AutoMigrate(&User{})
+	err := db.DB.AutoMigrate(&User{}, &Character{})
 	if err != nil {
 		return err
 	}

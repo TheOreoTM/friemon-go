@@ -140,7 +140,7 @@ func claimCharacterButton(b *bot.Bot) handler.ComponentHandler {
 		)
 
 		// Save character to database
-		if err := b.DB.CreateCharacter(e.Ctx, userID, character); err != nil {
+		if _, err := b.DB.CreateCharacter(e.Ctx, userID, character); err != nil {
 			log.Error("Failed to save character to database",
 				logger.DiscordUserID(userID),
 				logger.CharacterID(character.ID),

@@ -63,7 +63,7 @@ func HandleInfo(b *bot.Bot) handler.CommandHandler {
 				// Attempt to send an ephemeral error message to the user
 				_ = e.CreateMessage(ErrorMessage("An unexpected error occurred. Please try again later."))
 			}
-			log.Debug("Info command completed", // Changed to Debug for completion
+			log.Debug("Info command completed",
 				logger.Command(commandName),
 				logger.DiscordUserID(userID),
 				logger.Duration(duration),
@@ -74,7 +74,7 @@ func HandleInfo(b *bot.Bot) handler.CommandHandler {
 		var ch *game.Character
 		var err error
 
-		if characterIDParam != "" && characterIDParam != "-1" { // -1 might be from autocomplete placeholder
+		if characterIDParam != "" && characterIDParam != "no_match_found" { // -1 might be from autocomplete placeholder
 			log.Debug("Character ID parameter provided",
 				logger.DiscordUserID(userID),
 				zap.String("character_id_param", characterIDParam),
