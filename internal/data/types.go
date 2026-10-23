@@ -42,3 +42,25 @@ type Stats struct {
 	MagicDefense int
 	Speed        int
 }
+
+// typeChart lists the matchups that are not neutral: attacking type -> defending type -> multiplier.
+// 2 is super effective, 0.5 is not very effective; anything missing is 1.
+var typeChart = map[Type]map[Type]float64{
+	Destruction: {Curse: 2, Martial: 2, Barrier: 0.5}, // Zoltraak was made to kill demons; barriers stop it
+	Barrier:     {Destruction: 2, Martial: 0.5},       // turns offensive magic back; cannot stop a blade
+	Holy:        {Curse: 2, Barrier: 0.5},             // purifies demon magic
+	Martial:     {Barrier: 2, Nature: 2, Curse: 0.5},  // physical blows break barriers
+	Curse:       {Martial: 2, Nature: 2, Holy: 0.5, Barrier: 0.5},
+	Nature:      {Barrier: 2, Holy: 2, Destruction: 0.5},
+}
+
+// Effectiveness is the damage multiplier for a move of type attack against a defender's types.
+func Effectiveness(attack Type, defender []Type) float64 {
+	m := 1.0
+	for _, t := range defender {
+		if x, ok := typeChart[attack][t]; ok {
+			m *= x
+		}
+	}
+	return m
+}

@@ -64,6 +64,14 @@ var commands = []discord.ApplicationCommandCreate{
 		},
 	},
 	discord.SlashCommandCreate{
+		Name:        "battle",
+		Description: "Challenge another player to a 1v1 battle with your selected character",
+		Contexts:    guildOnly,
+		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionUser{Name: "opponent", Description: "Who to battle", Required: true},
+		},
+	},
+	discord.SlashCommandCreate{
 		Name:        "setspawn",
 		Description: "Set the channel where characters spawn",
 		Contexts:    guildOnly,
@@ -95,6 +103,12 @@ func (b *Bot) newRouter() *handler.Mux {
 	r.Autocomplete("/learn", b.autocompleteLearn)
 	// {user}, {idx} and {move} are variables, read in the handler from e.Vars.
 	r.Component("/learn-replace/{user}/{idx}/{move}", b.handleLearnReplace)
+	r.Command("/battle", b.handleBattle)
+	r.Component("/battle-accept/{id}", b.handleBattleAccept)
+	r.Component("/battle-decline/{id}", b.handleBattleDecline)
+	r.Component("/battle-choose/{id}", b.handleBattleChoose)
+	r.Component("/battle-move/{id}/{turn}/{idx}", b.handleBattleMove)
+	r.Component("/battle-flee/{id}", b.handleBattleFlee)
 
 	// When a handler returns an error, log it and tell the player something went wrong.
 	r.Error(func(e *handler.InteractionEvent, err error) {

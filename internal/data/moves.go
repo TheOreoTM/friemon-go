@@ -6,7 +6,7 @@ type Category int
 const (
 	Physical Category = iota // Attack vs Defense
 	Magical                  // Magic Attack vs Magic Defense
-	Status                   // no damage; its effect comes with battles
+	Status                   // no damage; uses Effect instead
 )
 
 func (c Category) String() string {
@@ -21,14 +21,25 @@ func (c Category) String() string {
 	return "Unknown"
 }
 
+// Effect is what a status move does.
+type Effect int
+
+const (
+	NoEffect          Effect = iota
+	Heal                     // restores half of max HP
+	RaiseDefense             // +1 Defense stage
+	RaiseMagicDefense        // +1 Magic Defense stage
+)
+
 // Move is something a character can do in battle. Characters refer to moves by ID.
 type Move struct {
 	ID          string // stable key saved in the database; never change it once characters know the move
 	Name        string
 	Type        Type
 	Category    Category
-	Power       int // 0 for status moves
-	Accuracy    int // percent
+	Power       int    // 0 for status moves
+	Accuracy    int    // percent
+	Effect      Effect // status moves only
 	Description string
 }
 
@@ -47,13 +58,13 @@ var Moves = []Move{
 		Description: "Hundreds of offensive spells at once. Hard to aim, harder to survive."},
 
 	// Barrier
-	{ID: "defensive_magic", Name: "Defensive Magic", Type: Barrier, Category: Status, Accuracy: 100,
+	{ID: "defensive_magic", Name: "Defensive Magic", Type: Barrier, Category: Status, Accuracy: 100, Effect: RaiseMagicDefense,
 		Description: "A hexagonal barrier that blocks offensive magic."},
 	{ID: "barrier_shatter", Name: "Barrier Shatter", Type: Barrier, Category: Magical, Power: 70, Accuracy: 95,
 		Description: "Breaks the target's defenses with focused mana."},
 
 	// Holy
-	{ID: "healing_magic", Name: "Healing Magic", Type: Holy, Category: Status, Accuracy: 100,
+	{ID: "healing_magic", Name: "Healing Magic", Type: Holy, Category: Status, Accuracy: 100, Effect: Heal,
 		Description: "A priest's prayer that closes wounds."},
 	{ID: "goddess_light", Name: "Goddess's Light", Type: Holy, Category: Magical, Power: 70, Accuracy: 100,
 		Description: "Holy light that burns away curses."},
@@ -67,7 +78,7 @@ var Moves = []Move{
 		Description: "A sword swing with the full weight of a hero's resolve."},
 	{ID: "axe_cleave", Name: "Axe Cleave", Type: Martial, Category: Physical, Power: 95, Accuracy: 85,
 		Description: "A huge overhead axe swing that splits the ground."},
-	{ID: "iron_body", Name: "Iron Body", Type: Martial, Category: Status, Accuracy: 100,
+	{ID: "iron_body", Name: "Iron Body", Type: Martial, Category: Status, Accuracy: 100, Effect: RaiseDefense,
 		Description: "Braces to shrug off a blow that would fell anyone else."},
 	{ID: "counter_blow", Name: "Counter Blow", Type: Martial, Category: Physical, Power: 65, Accuracy: 100,
 		Description: "Steps inside an attack and hits back."},

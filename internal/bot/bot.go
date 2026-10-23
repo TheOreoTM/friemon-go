@@ -30,6 +30,7 @@ type Bot struct {
 	counter    *game.SpawnCounter
 	xpCooldown *game.Cooldown
 	wild       *wildSpawns
+	battles    *battles
 	pages      *paginator.Manager
 }
 
@@ -41,6 +42,7 @@ func New(token, guildID string, st *store.Store) (*Bot, error) {
 		counter:    game.NewSpawnCounter(game.DefaultSpawnConfig),
 		xpCooldown: game.NewCooldown(game.XPCooldown),
 		wild:       newWildSpawns(),
+		battles:    newBattles(),
 		pages:      paginator.New(paginator.WithEmbedColor(embedColor)),
 	}
 	if guildID != "" {
@@ -80,6 +82,8 @@ func (b *Bot) Start(ctx context.Context) error {
 	if err := b.client.OpenGateway(ctx); err != nil {
 		return fmt.Errorf("open gateway: %w", err)
 	}
+	// "go" runs a function in the background on its own goroutine.
+	go b.expireBattles(ctx)
 	log.Printf("%d command(s) registered", len(commands))
 	return nil
 }

@@ -24,3 +24,30 @@ func TestMovesAreValid(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyStatusMovesHaveEffects(t *testing.T) {
+	for _, m := range Moves {
+		if m.Category != Status && m.Effect != NoEffect {
+			t.Errorf("%s deals damage but also has an effect", m.ID)
+		}
+	}
+}
+
+func TestEffectiveness(t *testing.T) {
+	tests := []struct {
+		attack   Type
+		defender []Type
+		want     float64
+	}{
+		{Destruction, []Type{Curse}, 2},
+		{Destruction, []Type{Barrier}, 0.5},
+		{Destruction, []Type{Holy}, 1},
+		{Martial, []Type{Barrier, Nature}, 4}, // both weaknesses multiply
+		{Martial, []Type{Barrier, Curse}, 1},  // a weakness and a resistance cancel out
+	}
+	for _, tt := range tests {
+		if got := Effectiveness(tt.attack, tt.defender); got != tt.want {
+			t.Errorf("Effectiveness(%s, %v) = %v, want %v", tt.attack, tt.defender, got, tt.want)
+		}
+	}
+}
