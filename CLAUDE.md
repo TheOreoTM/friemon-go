@@ -1,0 +1,76 @@
+# Friemon: project guide for Claude
+
+A Pokétwo-style Discord bot where players catch characters from *Frieren: Beyond Journey's End*,
+plus a free (no paid currency) Genshin-style relic system. This is a **fresh start**: do not reuse
+code from the old repos TheOreoTM/friemon (TypeScript) or TheOreoTM/friemon-go.
+
+## About the developer
+- Knows TypeScript, is **learning Go**. Prefer simple, idiomatic Go and briefly explain Go-specific idioms.
+- Do not over-engineer. No Redis, job queues or Docker/CI until they are actually needed.
+- Runs in WSL; the project lives in the WSL filesystem (not /mnt/c).
+
+## Stack
+- - Go, disgo (github.com/disgoorg/disgo), with disgoorg/paginator for paged lists
+- SQLite first, Postgres later if the bot grows
+- Static game data (characters, moves, relics, items) lives in **Go code as structs**, not JSON
+- Per-player data lives in the database: users, balances, each caught copy (own level, XP, stats, moves), relics, trades, listings
+
+## Layout
+```
+cmd/bot/main.go     entry point
+internal/game/      pure logic: spawn, battle, relics (NO Discord imports, unit-tested)
+internal/data/      characters, moves, relics, items
+internal/store/     database access
+internal/bot/       commands, handlers, cooldowns
+```
+
+## Design
+
+### Layer 1: Pokétwo-familiar (new players should feel at home)
+- Every message bumps a per-server counter (with per-user and per-server cooldowns); at a threshold
+  a random character spawns in a configured channel.
+- `catch <name>` guesses the name (case- and accent-insensitive, with aliases). `hint` reveals letters.
+- Commands: collection list, select, info, favorite, trade, market, same names as Pokétwo where possible.
+- Each caught copy has hidden stat rolls (like IVs), plus a level and XP gained from chatting.
+- Rarity tiers: Fern and Stark common, Himmel rare, Frieren legendary.
+
+### Moves
+- Characters reference moves by ID. A character's learnset is a list of {level, moveID}.
+- On catch: assign up to 4 random moves from those learnable at its starting level.
+- `learn <move>`: allowed if the learnset permits and the level is met; if the character already has 4,
+  ask which move to replace (select menu).
+- Item moves (e.g. a Grimoire) can teach moves outside the learnset to compatible characters.
+
+### Battling
+- 1v1 turn-based with buttons and a simple type chart (~6 types). Battle state is in memory.
+
+### Relics (free gacha, Genshin-artifact style)
+- 5 slots: Staff, Robe, Amulet, Ring, Grimoire. Rarity 1-5 stars, a set, a main stat, 3-4 substats.
+- Upgrade to +20 using Mana and fodder; substat rolls at +4/8/12/16/20.
+- Set bonuses at 2 and 4 pieces.
+- Sources: dungeon runs (main source, with a pity counter for a guaranteed 5 star), and a small
+  chance (~3-5%) of a drop on a wild catch, biased toward 1-3 stars; rarer characters raise the odds.
+  Pity applies to dungeons only. Wild drops use the same anti-spam caps as catching.
+- Mana is earned by playing, with a daily cap (like resin). Regenerate it lazily from timestamps.
+- Keep it easy for newcomers: an "auto-equip best" button and a simple relic score.
+
+### Frieren-specific features (later)
+- **Journeys:** send a character away for hours; store an `endsAt` timestamp and compute results when checked.
+- **Hero Party:** a team of 4 with party bonuses.
+- **Mana Suppression:** some spawns hide their true rarity until caught.
+- **First-Class Mage Exam:** seasonal ranked ladder.
+
+## Build order
+1. Bot connects and answers one slash command
+2. Spawn + catch + collection
+3. Levels, XP, moves
+4. Battles
+5. Relics + dungeons
+6. Journeys, market, seasons
+
+## Rules
+- Slash commands are the primary interface (prefix commands need the Message Content intent, which needs approval at 100+ servers).
+- No official Frieren art; use text embeds or original art. Character names and descriptions are fine.
+- Do not use "Poké" in names (Nintendo trademark).
+- Pokétwo's source is GPL-3.0: reimplement ideas, never copy its code.
+- Validate all game data (every move ID in a learnset exists) with a test that runs in CI.
