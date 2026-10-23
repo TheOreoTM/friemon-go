@@ -10,8 +10,10 @@ code from the old repos TheOreoTM/friemon (TypeScript) or TheOreoTM/friemon-go.
 - Runs in WSL; the project lives in the WSL filesystem (not /mnt/c).
 
 ## Stack
-- - Go, disgo (github.com/disgoorg/disgo), with disgoorg/paginator for paged lists
-- SQLite first, Postgres later if the bot grows
+- Go, disgo (github.com/disgoorg/disgo), with disgoorg/paginator for paged lists
+- Postgres on Neon, via pgx (`DATABASE_URL`, the pooled connection string). Migrations are numbered
+  `.sql` files in `internal/store/migrations`, applied on startup; never edit one that has already run.
+- Store tests use `TEST_DATABASE_URL` (a separate Neon branch) and are skipped when it is unset.
 - Static game data (characters, moves, relics, items) lives in **Go code as structs**, not JSON
 - Per-player data lives in the database: users, balances, each caught copy (own level, XP, stats, moves), relics, trades, listings
 
@@ -42,7 +44,9 @@ internal/bot/       commands, handlers, cooldowns
 - Item moves (e.g. a Grimoire) can teach moves outside the learnset to compatible characters.
 
 ### Battling
-- 1v1 turn-based with buttons and a simple type chart (~6 types). Battle state is in memory.
+- 1v1 turn-based with buttons and a simple type chart. Battle state is in memory.
+- Types: Destruction, Barrier, Holy, Martial, Curse, Nature. Moves are Physical (Attack/Defense),
+  Magical (Magic Attack/Magic Defense) or Status.
 
 ### Relics (free gacha, Genshin-artifact style)
 - 5 slots: Staff, Robe, Amulet, Ring, Grimoire. Rarity 1-5 stars, a set, a main stat, 3-4 substats.
