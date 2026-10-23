@@ -175,7 +175,7 @@ func (b *Bot) handleBattleAccept(e *handler.ComponentEvent) error {
 	for _, p := range ab.players {
 		b.battles.byUser[p.id] = ab
 	}
-	update := renderBattle(ab)
+	update := battleUpdate(ab, true)
 	b.battles.mu.Unlock()
 
 	return e.UpdateMessage(update)
@@ -252,8 +252,13 @@ func (b *Bot) handleBattleMove(e *handler.ComponentEvent) error {
 
 	b.battles.mu.Lock()
 	ab, ok := b.battles.active[e.Vars["id"]]
-	var reply string
-	var update *discord.MessageUpdate // the public battle message, if it changed
+	var (
+		reply      string
+		messageID  snowflake.ID           // the battle message as it was when we held the lock
+		edit       *discord.MessageUpdate // change to that message, if any
+		nextTurn   *discord.MessageCreate // a new message for the next turn, if the turn finished
+		turnPlayed bool
+	)
 	switch {
 	case !ok:
 		reply = "This battle has ended."
@@ -273,29 +278,62 @@ func (b *Bot) handleBattleMove(e *handler.ComponentEvent) error {
 			ab.choices[i] = idx
 			ab.lastAction = time.Now()
 			reply = fmt.Sprintf("You chose **%s**.", fighter.Moves[idx].Name)
+			messageID = ab.messageID
 
 			if ab.choices[0] >= 0 && ab.choices[1] >= 0 {
+				// Close off this turn's message: final footer, no buttons.
+				u := battleUpdate(ab, false)
+				edit = &u
+
 				ab.log = ab.game.PlayTurn(newRand(), ab.choices)
 				ab.choices = [2]int{-1, -1}
 				if ab.game.Over() {
 					b.battles.end(ab)
 				}
+				c := battleCreate(ab)
+				nextTurn = &c
+				turnPlayed = true
 			} else {
 				reply += " Waiting for your opponent."
+				u := battleUpdate(ab, true) // same message, new "waiting for" footer
+				edit = &u
 			}
-			u := renderBattle(ab)
-			update = &u
 		}
 	}
 	b.battles.mu.Unlock()
 
-	// Answer the click first (Discord wants a reply within 3 seconds), then edit the battle message.
+	// Answer the click first (Discord wants a reply within 3 seconds), then update the battle.
 	if err := e.UpdateMessage(contentOnly(reply)); err != nil {
 		return err
 	}
-	if update != nil {
-		if _, err := e.Client().Rest.UpdateMessage(ab.channelID, ab.messageID, *update); err != nil {
+	rest := e.Client().Rest
+	if edit != nil {
+		if _, err := rest.UpdateMessage(ab.channelID, messageID, *edit); err != nil {
 			log.Printf("update battle message %s: %v", ab.id, err)
+		}
+	}
+	if !turnPlayed {
+		return nil
+	}
+
+	msg, err := rest.CreateMessage(ab.channelID, *nextTurn)
+	if err != nil {
+		return fmt.Errorf("send next battle turn: %w", err)
+	}
+
+	// Point the battle at the new message. A player may have already picked a move
+	// for the next turn while it was being sent; if so, refresh its footer.
+	b.battles.mu.Lock()
+	ab.messageID = msg.ID
+	var refresh *discord.MessageUpdate
+	if !ab.game.Over() && ab.choices != [2]int{-1, -1} {
+		u := battleUpdate(ab, true)
+		refresh = &u
+	}
+	b.battles.mu.Unlock()
+	if refresh != nil {
+		if _, err := rest.UpdateMessage(ab.channelID, msg.ID, *refresh); err != nil {
+			log.Printf("refresh battle message %s: %v", ab.id, err)
 		}
 	}
 	return nil
@@ -312,7 +350,7 @@ func (b *Bot) handleBattleFlee(e *handler.ComponentEvent) error {
 			ab.game.Forfeit(i)
 			ab.log = []string{fmt.Sprintf("%s fled! **%s wins!**", ab.players[i].name, ab.players[1-i].name)}
 			b.battles.end(ab)
-			update = renderBattle(ab)
+			update = battleUpdate(ab, false)
 		}
 	}
 	b.battles.mu.Unlock()
@@ -354,7 +392,7 @@ func (b *Bot) expireBattles(ctx context.Context) {
 			if time.Since(ab.lastAction) > battleIdleTimeout {
 				ab.log = []string{"The battle ended because nobody moved for 5 minutes."}
 				b.battles.end(ab) // deleting from a map while ranging over it is allowed in Go
-				edits = append(edits, edit{ab.channelID, ab.messageID, renderBattle(ab)})
+				edits = append(edits, edit{ab.channelID, ab.messageID, battleUpdate(ab, false)})
 			}
 		}
 		b.battles.mu.Unlock()
@@ -385,16 +423,22 @@ func (b *Bot) loadFighter(ctx context.Context, p player) (f *game.Fighter, probl
 	return f, "", nil
 }
 
-// renderBattle draws the battle message. The caller must hold the battles lock.
-func renderBattle(ab *activeBattle) discord.MessageUpdate {
-	g := ab.game
-	embed := discord.NewEmbed().
-		WithTitlef("⚔️ %s vs %s", ab.players[0].name, ab.players[1].name).
-		WithColor(embedColor)
+// winColor marks a finished battle.
+const winColor = 0xf1c40f
 
-	for _, f := range g.Fighters {
-		embed = embed.AddField(f.Name, fmt.Sprintf("Lvl. %d • %s\n`%s` %d/%d HP",
-			f.Level, typeNames(f.Types), hpBar(f.HP, f.Stats.HP), f.HP, f.Stats.HP), false)
+// battleEmbed draws the battle as it stands. Each turn gets its own message, so
+// the embed shows what happened last turn and both characters' HP after it.
+// The caller must hold the battles lock.
+func battleEmbed(ab *activeBattle, buttons bool) discord.Embed {
+	g := ab.game
+	embed := discord.NewEmbed().WithColor(embedColor)
+	switch {
+	case g.Over():
+		embed = embed.WithTitlef("🏆 %s wins!", ab.players[g.Winner].name).WithColor(winColor)
+	case g.Turn == 0:
+		embed = embed.WithTitlef("⚔️ %s vs %s", ab.players[0].name, ab.players[1].name)
+	default:
+		embed = embed.WithTitlef("⚔️ Turn %d", g.Turn)
 	}
 
 	if len(ab.log) > 0 {
@@ -403,9 +447,10 @@ func renderBattle(ab *activeBattle) discord.MessageUpdate {
 		embed = embed.WithDescription("The battle begins! Press **Choose move** to pick your move.")
 	}
 
-	update := discord.NewMessageUpdate().WithContent("").WithEmbeds(embed)
-	if g.Over() {
-		return update.ClearComponents()
+	// Inline fields sit side by side, one per fighter.
+	for _, f := range g.Fighters {
+		embed = embed.AddField(f.Name, fmt.Sprintf("Lvl. %d • %s\n`%s`\n**%d**/%d HP",
+			f.Level, typeNames(f.Types), hpBar(f.HP, f.Stats.HP), f.HP, f.Stats.HP), true)
 	}
 
 	var waiting []string
@@ -414,11 +459,41 @@ func renderBattle(ab *activeBattle) discord.MessageUpdate {
 			waiting = append(waiting, p.name)
 		}
 	}
-	embed = embed.WithFooterTextf("Turn %d • Waiting for %s", g.Turn+1, strings.Join(waiting, " and "))
-	return update.WithEmbeds(embed).WithComponents(discord.NewActionRow(
+	switch {
+	case g.Over():
+	case buttons:
+		embed = embed.WithFooterTextf("Turn %d • Waiting for %s", g.Turn+1, strings.Join(waiting, " and "))
+	case len(waiting) == 0:
+		embed = embed.WithFooterText("Both players have chosen.")
+	}
+	return embed
+}
+
+func battleButtons(ab *activeBattle) discord.LayoutComponent {
+	return discord.NewActionRow(
 		discord.NewPrimaryButton("Choose move", "/battle-choose/"+ab.id),
 		discord.NewDangerButton("Flee", "/battle-flee/"+ab.id),
-	))
+	)
+}
+
+// battleUpdate edits the current battle message, with or without its buttons.
+func battleUpdate(ab *activeBattle, buttons bool) discord.MessageUpdate {
+	buttons = buttons && !ab.game.Over()
+	update := discord.NewMessageUpdate().WithContent("").WithEmbeds(battleEmbed(ab, buttons))
+	if !buttons {
+		return update.ClearComponents()
+	}
+	return update.WithComponents(battleButtons(ab))
+}
+
+// battleCreate is the new message sent after each turn.
+func battleCreate(ab *activeBattle) discord.MessageCreate {
+	buttons := !ab.game.Over()
+	msg := discord.MessageCreate{Embeds: []discord.Embed{battleEmbed(ab, buttons)}}
+	if buttons {
+		msg.Components = []discord.LayoutComponent{battleButtons(ab)}
+	}
+	return msg
 }
 
 // hpBar draws HP as 10 blocks, like ███████░░░.
