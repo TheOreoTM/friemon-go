@@ -82,3 +82,11 @@ func TestCharacterTypesStatsAndLearnsets(t *testing.T) {
 		}
 	}
 }
+
+func TestEVYields(t *testing.T) {
+	for _, c := range Characters {
+		if total := c.EVYield.Total(); total < 1 || total > 3 {
+			t.Errorf("%s yields %d EVs, want 1-3", c.ID, total)
+		}
+	}
+}

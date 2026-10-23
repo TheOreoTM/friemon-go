@@ -4,54 +4,50 @@ package data
 type Type int
 
 const (
-	Destruction Type = iota // offensive magic, like Zoltraak
-	Barrier                 // defensive magic
-	Holy                    // priests and healing
-	Martial                 // warriors and weapons
-	Curse                   // demon magic
-	Nature                  // folk spells, flowers
+	TypeDestruction Type = iota // offensive magic, like Zoltraak
+	TypeBarrier                 // defensive magic
+	TypeHoly                    // priests and healing
+	TypeMartial                 // warriors and weapons
+	TypeCurse                   // demon magic
+	TypeNature                  // folk spells, flowers
 )
 
+// NoType is for typeless damage, like hitting yourself in confusion. It never gets a
+// same-type bonus and is neutral against everything.
+const NoType Type = -1
+
 // AllTypes lists every type, in display order.
-var AllTypes = []Type{Destruction, Barrier, Holy, Martial, Curse, Nature}
+var AllTypes = []Type{TypeDestruction, TypeBarrier, TypeHoly, TypeMartial, TypeCurse, TypeNature}
 
 func (t Type) String() string {
 	switch t {
-	case Destruction:
+	case TypeDestruction:
 		return "Destruction"
-	case Barrier:
+	case TypeBarrier:
 		return "Barrier"
-	case Holy:
+	case TypeHoly:
 		return "Holy"
-	case Martial:
+	case TypeMartial:
 		return "Martial"
-	case Curse:
+	case TypeCurse:
 		return "Curse"
-	case Nature:
+	case TypeNature:
 		return "Nature"
+	case NoType:
+		return "Typeless"
 	}
 	return "Unknown"
-}
-
-// Stats is one number per battle stat. It is used for base stats, hidden rolls and final stats.
-type Stats struct {
-	HP           int
-	Attack       int
-	Defense      int
-	MagicAttack  int
-	MagicDefense int
-	Speed        int
 }
 
 // typeChart lists the matchups that are not neutral: attacking type -> defending type -> multiplier.
 // 2 is super effective, 0.5 is not very effective; anything missing is 1.
 var typeChart = map[Type]map[Type]float64{
-	Destruction: {Curse: 2, Martial: 2, Barrier: 0.5}, // Zoltraak was made to kill demons; barriers stop it
-	Barrier:     {Destruction: 2, Martial: 0.5},       // turns offensive magic back; cannot stop a blade
-	Holy:        {Curse: 2, Barrier: 0.5},             // purifies demon magic
-	Martial:     {Barrier: 2, Nature: 2, Curse: 0.5},  // physical blows break barriers
-	Curse:       {Martial: 2, Nature: 2, Holy: 0.5, Barrier: 0.5},
-	Nature:      {Barrier: 2, Holy: 2, Destruction: 0.5},
+	TypeDestruction: {TypeCurse: 2, TypeMartial: 2, TypeBarrier: 0.5}, // Zoltraak was made to kill demons; barriers stop it
+	TypeBarrier:     {TypeDestruction: 2, TypeMartial: 0.5},           // turns offensive magic back; cannot stop a blade
+	TypeHoly:        {TypeCurse: 2, TypeBarrier: 0.5},                 // purifies demon magic
+	TypeMartial:     {TypeBarrier: 2, TypeNature: 2, TypeCurse: 0.5},  // physical blows break barriers
+	TypeCurse:       {TypeMartial: 2, TypeNature: 2, TypeHoly: 0.5, TypeBarrier: 0.5},
+	TypeNature:      {TypeBarrier: 2, TypeHoly: 2, TypeDestruction: 0.5},
 }
 
 // Effectiveness is the damage multiplier for a move of type attack against a defender's types.

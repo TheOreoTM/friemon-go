@@ -44,7 +44,14 @@ internal/bot/       commands, handlers, cooldowns
 - Item moves (e.g. a Grimoire) can teach moves outside the learnset to compatible characters.
 
 ### Battling
-- 1v1 turn-based with buttons and a simple type chart. Battle state is in memory.
+- Goal: Pokémon-level depth. Party vs party (up to 4 each) with switching, turn-based with buttons.
+  Battle state is in memory.
+- Stats: base + IVs + EVs (earned from battles) + level + nature (+10%/-10%), Pokémon formula.
+- Moves are data plus effects: priority, crit stage, flags, multi-hit, recoil, drain, and a list of
+  effects with chance and target. Rare one-off moves may get custom code.
+- Statuses and field effects use Pokémon mechanics with a mix of names: universal ones keep
+  Pokémon names (Burn, Sleep, Freeze, Confusion), others are Frieren-themed.
+- Abilities, field effects and relic set bonuses plug into the battle engine through hooks.
 - Types: Destruction, Barrier, Holy, Martial, Curse, Nature. Moves are Physical (Attack/Defense),
   Magical (Magic Attack/Magic Defense) or Status.
 
@@ -60,7 +67,9 @@ internal/bot/       commands, handlers, cooldowns
 
 ### Frieren-specific features (later)
 - **Journeys:** send a character away for hours; store an `endsAt` timestamp and compute results when checked.
-- **Hero Party:** a team of 4 with party bonuses.
+- **Hero Party:** `/party` holds up to 4 characters and is also the battle team. Slot 1 is the
+  leader (`/select` sets it). Chatting gives the leader full XP and the others 50%.
+  Party bonuses come later.
 - **Mana Suppression:** some spawns hide their true rarity until caught.
 - **First-Class Mage Exam:** seasonal ranked ladder.
 

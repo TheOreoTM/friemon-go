@@ -16,43 +16,62 @@ import (
 	"github.com/TheOreoTM/friemon-go/internal/store"
 )
 
-// giveXP adds message XP to the author's selected character and announces level-ups.
+// giveXP adds message XP to the author's party and announces any level-ups in one message.
 func (b *Bot) giveXP(ctx context.Context, e *events.GuildMessageCreate) {
-	up, err := b.store.AddXPToSelected(ctx, e.Message.Author.ID, game.RollMessageXP(newRand()))
+	ups, err := b.store.AddPartyXP(ctx, e.Message.Author.ID, game.RollMessageXP(newRand()))
 	if err != nil {
 		log.Printf("add XP for %s: %v", e.Message.Author.ID, err)
 		return
 	}
-	if up == nil {
+	if len(ups) == 0 {
 		return
 	}
 
-	c := characterData(up.CharacterID)
-	msg := fmt.Sprintf("Congratulations %s! Your **%s** is now level %d!", e.Message.Author.Mention(), c.Name, up.NewLevel)
-	if newMoves := game.NewMovesBetween(c, up.OldLevel, up.NewLevel); len(newMoves) > 0 {
-		msg += fmt.Sprintf("\nIt can now learn %s. Use `/learn` to teach it.", moveNames(newMoves))
+	var lines []string
+	for _, up := range ups {
+		c := characterData(up.CharacterID)
+		line := fmt.Sprintf("Your **%s** is now level %d!", c.Name, up.NewLevel)
+		if newMoves := game.NewMovesBetween(c, up.OldLevel, up.NewLevel); len(newMoves) > 0 {
+			line += fmt.Sprintf(" It can now learn %s.", moveNames(newMoves))
+		}
+		lines = append(lines, line)
 	}
+	msg := fmt.Sprintf("Congratulations %s!\n%s", e.Message.Author.Mention(), strings.Join(lines, "\n"))
 	if _, err := e.Client().Rest.CreateMessage(e.ChannelID, discord.MessageCreate{Content: msg}); err != nil {
 		log.Printf("announce level up in %s: %v", e.ChannelID, err)
 	}
 }
 
+// handleSelect makes a character the party leader.
 func (b *Bot) handleSelect(e *handler.CommandEvent) error {
+	user := e.User().ID
 	idx := e.SlashCommandInteractionData().Int("number")
-	ok, err := b.store.SelectCharacter(e.Ctx, e.User().ID, idx)
+	oc, ok, err := b.store.GetCharacter(e.Ctx, user, idx)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return e.CreateMessage(ephemeral(fmt.Sprintf("You do not have a character #%d.", idx)))
 	}
-	oc, _, err := b.store.GetCharacter(e.Ctx, e.User().ID, idx)
+	if b.battles.inBattle(user) {
+		return e.CreateMessage(ephemeral("You cannot change your party during a battle."))
+	}
+
+	party, err := b.store.PartyIdxs(e.Ctx, user)
 	if err != nil {
 		return err
 	}
+	party, dropped := game.PartyWithLeader(party, idx)
+	if err := b.store.SetParty(e.Ctx, user, party); err != nil {
+		return err
+	}
+
 	c := characterData(oc.CharacterID)
-	return e.CreateMessage(discord.MessageCreate{Content: fmt.Sprintf(
-		"You selected your level %d **%s** (#%d).", oc.Level, c.Name, idx)})
+	msg := fmt.Sprintf("Your level %d **%s** (#%d) now leads your party.", oc.Level, c.Name, idx)
+	if dropped != 0 {
+		msg += fmt.Sprintf(" #%d left the party to make room.", dropped)
+	}
+	return e.CreateMessage(discord.MessageCreate{Content: msg})
 }
 
 func (b *Bot) handleInfo(e *handler.CommandEvent) error {
@@ -65,7 +84,8 @@ func (b *Bot) handleInfo(e *handler.CommandEvent) error {
 	}
 
 	c := characterData(oc.CharacterID)
-	stats := game.CalcStats(c.BaseStats, oc.IVs, oc.Level)
+	nature := natureOf(oc.Nature)
+	stats := game.CalcStats(c.BaseStats, oc.IVs, oc.EVs, oc.Level, nature)
 
 	var d strings.Builder
 	if oc.Level < game.MaxLevel {
@@ -73,18 +93,20 @@ func (b *Bot) handleInfo(e *handler.CommandEvent) error {
 	} else {
 		d.WriteString("**XP:** Max level\n")
 	}
-	fmt.Fprintf(&d, "**Types:** %s\n\n", typeNames(c.Types))
+	fmt.Fprintf(&d, "**Types:** %s\n", typeNames(c.Types))
+	fmt.Fprintf(&d, "**Nature:** %s\n\n", natureText(nature))
 
-	statLine := func(label string, value, iv int) {
-		fmt.Fprintf(&d, "**%s:** %d – IV: %d/%d\n", label, value, iv, game.MaxIV)
+	for _, s := range data.MainStats {
+		label := shortStatName(s)
+		// Mark the stats the nature changes, like the main games do.
+		if !nature.Neutral() && s == nature.Up {
+			label += " ▲"
+		} else if !nature.Neutral() && s == nature.Down {
+			label += " ▼"
+		}
+		fmt.Fprintf(&d, "**%s:** %d – IV: %d/%d – EV: %d\n", label, stats.Get(s), oc.IVs.Get(s), game.MaxIV, oc.EVs.Get(s))
 	}
-	statLine("HP", stats.HP, oc.IVs.HP)
-	statLine("Attack", stats.Attack, oc.IVs.Attack)
-	statLine("Defense", stats.Defense, oc.IVs.Defense)
-	statLine("Magic Atk", stats.MagicAttack, oc.IVs.MagicAttack)
-	statLine("Magic Def", stats.MagicDefense, oc.IVs.MagicDefense)
-	statLine("Speed", stats.Speed, oc.IVs.Speed)
-	fmt.Fprintf(&d, "**Total IV:** %.2f%%", game.IVPercent(oc.IVs))
+	fmt.Fprintf(&d, "**Total IV:** %.2f%%\n**Total EV:** %d/%d", game.IVPercent(oc.IVs), oc.EVs.Total(), game.MaxEVTotal)
 
 	moves := "None. Use `/learn` to teach one."
 	if len(oc.Moves) > 0 {
@@ -98,6 +120,34 @@ func (b *Bot) handleInfo(e *handler.CommandEvent) error {
 		WithFooterTextf("Displaying character #%d.", oc.Idx).
 		WithColor(embedColor)
 	return e.CreateMessage(discord.MessageCreate{Embeds: []discord.Embed{embed}})
+}
+
+// natureOf looks up a nature by ID, falling back to a neutral one.
+func natureOf(id string) data.Nature {
+	if n, ok := data.NatureByID(id); ok {
+		return n
+	}
+	n, _ := data.NatureByID("hardy")
+	return n
+}
+
+// natureText describes a nature, like "Adamant (+Attack, -Magic Attack)".
+func natureText(n data.Nature) string {
+	if n.Neutral() {
+		return n.Name + " (no change)"
+	}
+	return fmt.Sprintf("%s (+%s, -%s)", n.Name, n.Up, n.Down)
+}
+
+// shortStatName is the stat name used in /info.
+func shortStatName(s data.Stat) string {
+	switch s {
+	case data.StatMagicAttack:
+		return "Magic Atk"
+	case data.StatMagicDefense:
+		return "Magic Def"
+	}
+	return s.String()
 }
 
 // characterOption loads the character given by the optional "number" option,

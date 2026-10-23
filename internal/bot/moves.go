@@ -12,28 +12,30 @@ import (
 
 	"github.com/TheOreoTM/friemon-go/internal/data"
 	"github.com/TheOreoTM/friemon-go/internal/game"
+	"github.com/TheOreoTM/friemon-go/internal/store"
 )
 
 func (b *Bot) handleMoves(e *handler.CommandEvent) error {
-	oc, ok, err := b.store.SelectedCharacter(e.Ctx, e.User().ID)
+	oc, ok, err := b.characterOption(e.Ctx, e.User().ID, e.SlashCommandInteractionData())
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return e.CreateMessage(ephemeral("You have no characters yet. Catch one first!"))
+		return e.CreateMessage(ephemeral(noCharacterMessage))
 	}
 	c := characterData(oc.CharacterID)
 
-	var current strings.Builder
+	var d strings.Builder
+	fmt.Fprintf(&d, "**Current moves (%d/%d)**\n", len(oc.Moves), game.MaxMoves)
 	for _, id := range oc.Moves {
-		current.WriteString(moveLine(id) + "\n")
+		d.WriteString(moveLine(id) + "\n")
 	}
 	if len(oc.Moves) == 0 {
-		current.WriteString("None")
+		d.WriteString("None\n")
 	}
 
 	// List the whole learnset, marking moves that are known or still locked.
-	var learnset strings.Builder
+	d.WriteString("\n**Learnset**\n")
 	for _, entry := range c.Learnset {
 		mark := "✅" // can learn now
 		switch {
@@ -42,28 +44,34 @@ func (b *Bot) handleMoves(e *handler.CommandEvent) error {
 		case entry.Level > oc.Level:
 			mark = "🔒"
 		}
-		fmt.Fprintf(&learnset, "%s Lvl. %d • %s\n", mark, entry.Level, moveLine(entry.MoveID))
+		fmt.Fprintf(&d, "%s Lvl. %d • %s\n", mark, entry.Level, moveLine(entry.MoveID))
 	}
 
 	embed := discord.NewEmbed().
-		WithTitlef("Level %d %s moves", oc.Level, c.Name).
-		AddField(fmt.Sprintf("Current moves (%d/%d)", len(oc.Moves), game.MaxMoves), current.String(), false).
-		AddField("Learnset", learnset.String(), false).
+		WithTitlef("Level %d %s moves (#%d)", oc.Level, c.Name, oc.Idx).
+		WithDescription(d.String()).
 		WithFooterText("✅ can learn  ☑️ known  🔒 needs a higher level • Use /learn to teach a move.").
 		WithColor(embedColor)
 	return e.CreateMessage(discord.MessageCreate{Embeds: []discord.Embed{embed}})
 }
 
-// moveLine describes a move in one line, like "**Zoltraak** (Destruction, 60 power)".
+const noCharacterMessage = "You do not have that character. Check `/collection` for your numbers, or catch one first!"
+
+// moveLine describes a move in one line, like "**Zoltraak** • Destruction • Magical 60 • 100% • 25 PP".
 func moveLine(id string) string {
 	m, ok := data.MoveByID(id)
 	if !ok {
 		return id
 	}
-	if m.Category == data.Status {
-		return fmt.Sprintf("**%s** (%s, status)", m.Name, m.Type)
+	kind := "Status"
+	if m.Category != data.Status {
+		kind = fmt.Sprintf("%s %d", m.Category, m.Power)
 	}
-	return fmt.Sprintf("**%s** (%s, %d power)", m.Name, m.Type, m.Power)
+	acc := "—"
+	if m.Accuracy > 0 {
+		acc = fmt.Sprintf("%d%%", m.Accuracy)
+	}
+	return fmt.Sprintf("**%s** • %s • %s • %s • %d PP", m.Name, m.Type, kind, acc, m.PP)
 }
 
 // findMove accepts a move ID (what autocomplete sends) or a typed name.
@@ -81,12 +89,15 @@ func findMove(input string) (data.Move, bool) {
 }
 
 func (b *Bot) handleLearn(e *handler.CommandEvent) error {
-	oc, ok, err := b.store.SelectedCharacter(e.Ctx, e.User().ID)
+	oc, ok, err := b.characterOption(e.Ctx, e.User().ID, e.SlashCommandInteractionData())
 	if err != nil {
 		return err
 	}
 	if !ok {
-		return e.CreateMessage(ephemeral("You have no characters yet. Catch one first!"))
+		return e.CreateMessage(ephemeral(noCharacterMessage))
+	}
+	if b.battles.inBattle(e.User().ID) {
+		return e.CreateMessage(ephemeral("You cannot change moves during a battle."))
 	}
 	c := characterData(oc.CharacterID)
 
@@ -168,10 +179,17 @@ func (b *Bot) handleLearnReplace(e *handler.ComponentEvent) error {
 		c.Name, moveNames([]string{old}), newMove.Name)))
 }
 
-// autocompleteLearn suggests moves the selected character can learn right now.
+// autocompleteLearn suggests moves the chosen character (or the leader) can learn right now.
 func (b *Bot) autocompleteLearn(e *handler.AutocompleteEvent) error {
 	choices := []discord.AutocompleteChoice{}
-	oc, ok, err := b.store.SelectedCharacter(e.Ctx, e.User().ID)
+	var oc store.OwnedCharacter
+	var ok bool
+	var err error
+	if idx, given := e.Data.OptInt("number"); given {
+		oc, ok, err = b.store.GetCharacter(e.Ctx, e.User().ID, idx)
+	} else {
+		oc, ok, err = b.store.SelectedCharacter(e.Ctx, e.User().ID)
+	}
 	if err != nil || !ok {
 		return e.AutocompleteResult(choices) // an empty list; errors cannot be shown here
 	}

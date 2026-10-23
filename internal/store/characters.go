@@ -18,8 +18,10 @@ type OwnedCharacter struct {
 	Idx         int // the owner's #1, #2, ...
 	CharacterID string
 	Level       int
-	XP          int // towards the next level
+	XP          int    // towards the next level
+	Nature      string // a nature ID
 	IVs         data.Stats
+	EVs         data.Stats
 	Moves       []string
 	Favorite    bool
 	CaughtAt    time.Time
@@ -27,22 +29,25 @@ type OwnedCharacter struct {
 
 // characterColumns and scanCharacter go together: every query that returns
 // whole characters selects these columns, in this order.
-const characterColumns = `c.idx, c.character_id, c.level, c.xp,
+const characterColumns = `c.idx, c.character_id, c.level, c.xp, c.nature,
 	c.iv_hp, c.iv_attack, c.iv_defense, c.iv_magic_attack, c.iv_magic_defense, c.iv_speed,
+	c.ev_hp, c.ev_attack, c.ev_defense, c.ev_magic_attack, c.ev_magic_defense, c.ev_speed,
 	c.moves, c.favorite, c.caught_at`
 
 // pgx.Row is an interface satisfied by both a single QueryRow result and each row
 // of a Query, so this one function scans both.
 func scanCharacter(row pgx.Row) (OwnedCharacter, error) {
 	var c OwnedCharacter
-	err := row.Scan(&c.Idx, &c.CharacterID, &c.Level, &c.XP,
-		&c.IVs.HP, &c.IVs.Attack, &c.IVs.Defense, &c.IVs.MagicAttack, &c.IVs.MagicDefense, &c.IVs.Speed,
+	iv, ev := &c.IVs, &c.EVs
+	err := row.Scan(&c.Idx, &c.CharacterID, &c.Level, &c.XP, &c.Nature,
+		&iv.HP, &iv.Attack, &iv.Defense, &iv.MagicAttack, &iv.MagicDefense, &iv.Speed,
+		&ev.HP, &ev.Attack, &ev.Defense, &ev.MagicAttack, &ev.MagicDefense, &ev.Speed,
 		&c.Moves, &c.Favorite, &c.CaughtAt)
 	return c, err
 }
 
 // AddCaught saves a newly caught character for a user and returns its number (#1, #2, ...).
-// The user's first character becomes their selected one.
+// The user's first character becomes their party leader.
 func (s *Store) AddCaught(ctx context.Context, userID snowflake.ID, c game.Caught) (int, error) {
 	// pgx.BeginFunc commits if the function returns nil and rolls back if it returns an error.
 	var idx int
@@ -50,7 +55,7 @@ func (s *Store) AddCaught(ctx context.Context, userID snowflake.ID, c game.Caugh
 		// Create the user on their first catch, and take the next number atomically,
 		// so two catches at the same moment can never get the same number.
 		err := tx.QueryRow(ctx, `
-			INSERT INTO users (id, next_idx, selected_idx) VALUES ($1, 1, 1)
+			INSERT INTO users (id, next_idx, party) VALUES ($1, 1, '{1}')
 			ON CONFLICT (id) DO UPDATE SET next_idx = users.next_idx + 1
 			RETURNING next_idx`,
 			userID).Scan(&idx)
@@ -64,10 +69,10 @@ func (s *Store) AddCaught(ctx context.Context, userID snowflake.ID, c game.Caugh
 		}
 		iv := c.IVs
 		_, err = tx.Exec(ctx, `
-			INSERT INTO characters (owner_id, idx, character_id, level, moves,
+			INSERT INTO characters (owner_id, idx, character_id, level, nature, moves,
 				iv_hp, iv_attack, iv_defense, iv_magic_attack, iv_magic_defense, iv_speed)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			userID, idx, c.CharacterID, c.Level, moves,
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			userID, idx, c.CharacterID, c.Level, c.Nature, moves,
 			iv.HP, iv.Attack, iv.Defense, iv.MagicAttack, iv.MagicDefense, iv.Speed)
 		if err != nil {
 			return fmt.Errorf("insert character: %w", err)
@@ -87,7 +92,11 @@ func (s *Store) ListCharacters(ctx context.Context, userID snowflake.ID, limit, 
 	if err != nil {
 		return nil, err
 	}
-	// CollectRows calls the function once per row and gathers the results into a slice.
+	return collectCharacters(rows)
+}
+
+// collectCharacters scans every row into a slice. CollectRows calls the function once per row.
+func collectCharacters(rows pgx.Rows) ([]OwnedCharacter, error) {
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (OwnedCharacter, error) {
 		return scanCharacter(row)
 	})
@@ -109,11 +118,11 @@ func (s *Store) GetCharacter(ctx context.Context, userID snowflake.ID, idx int) 
 	return found(scanCharacter(row))
 }
 
-// SelectedCharacter returns the user's selected character. ok is false if they have none.
+// SelectedCharacter returns the user's party leader. ok is false if they have none.
 func (s *Store) SelectedCharacter(ctx context.Context, userID snowflake.ID) (c OwnedCharacter, ok bool, err error) {
 	row := s.db.QueryRow(ctx, `
 		SELECT `+characterColumns+` FROM characters c
-		JOIN users u ON u.id = c.owner_id AND u.selected_idx = c.idx
+		JOIN users u ON u.id = c.owner_id AND c.idx = u.party[1]
 		WHERE u.id = $1`,
 		userID)
 	return found(scanCharacter(row))
@@ -130,69 +139,19 @@ func found(c OwnedCharacter, err error) (OwnedCharacter, bool, error) {
 	return c, true, nil
 }
 
-// SelectCharacter makes one of the user's characters their selected one.
-// ok is false if they have no character with that number.
-func (s *Store) SelectCharacter(ctx context.Context, userID snowflake.ID, idx int) (ok bool, err error) {
-	tag, err := s.db.Exec(ctx, `
-		UPDATE users SET selected_idx = $2
-		WHERE id = $1 AND EXISTS (SELECT 1 FROM characters WHERE owner_id = $1 AND idx = $2)`,
-		userID, idx)
-	if err != nil {
-		return false, err
-	}
-	return tag.RowsAffected() == 1, nil
-}
-
-// LevelUp describes a character that just gained one or more levels.
-type LevelUp struct {
-	Idx         int
-	CharacterID string
-	OldLevel    int
-	NewLevel    int
-}
-
-// AddXPToSelected gives XP to the user's selected character.
-// It returns a LevelUp if the character levelled up, or nil if not (or if there is no selected character).
-func (s *Store) AddXPToSelected(ctx context.Context, userID snowflake.ID, gain int) (*LevelUp, error) {
-	var up *LevelUp
-	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-		var idx, level, xp int
-		var characterID string
-		// FOR UPDATE locks the row until the transaction ends, so two messages
-		// at once cannot both read the old XP and lose one of the gains.
-		err := tx.QueryRow(ctx, `
-			SELECT c.idx, c.character_id, c.level, c.xp FROM characters c
-			JOIN users u ON u.id = c.owner_id AND u.selected_idx = c.idx
-			WHERE u.id = $1
-			FOR UPDATE OF c`,
-			userID).Scan(&idx, &characterID, &level, &xp)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil // no characters yet
-		}
-		if err != nil {
-			return err
-		}
-		if level >= game.MaxLevel {
-			return nil
-		}
-
-		newLevel, newXP := game.AddXP(level, xp, gain)
-		_, err = tx.Exec(ctx, `UPDATE characters SET level = $3, xp = $4 WHERE owner_id = $1 AND idx = $2`,
-			userID, idx, newLevel, newXP)
-		if err != nil {
-			return err
-		}
-		if newLevel > level {
-			up = &LevelUp{Idx: idx, CharacterID: characterID, OldLevel: level, NewLevel: newLevel}
-		}
-		return nil
-	})
-	return up, err
-}
-
 // SetMoves replaces the moves a user's character knows.
 func (s *Store) SetMoves(ctx context.Context, userID snowflake.ID, idx int, moves []string) error {
 	_, err := s.db.Exec(ctx, `UPDATE characters SET moves = $3 WHERE owner_id = $1 AND idx = $2`,
 		userID, idx, moves)
+	return err
+}
+
+// SetEVs replaces a character's effort values.
+func (s *Store) SetEVs(ctx context.Context, userID snowflake.ID, idx int, ev data.Stats) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE characters SET ev_hp = $3, ev_attack = $4, ev_defense = $5,
+			ev_magic_attack = $6, ev_magic_defense = $7, ev_speed = $8
+		WHERE owner_id = $1 AND idx = $2`,
+		userID, idx, ev.HP, ev.Attack, ev.Defense, ev.MagicAttack, ev.MagicDefense, ev.Speed)
 	return err
 }

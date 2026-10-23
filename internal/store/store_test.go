@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"math/rand/v2"
 	"os"
 	"slices"
@@ -105,54 +106,65 @@ func TestAddAndListCharacters(t *testing.T) {
 	}
 }
 
-func TestSelectXPAndMoves(t *testing.T) {
+func TestPartyXPAndMoves(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	user := testID(t, s)
 
-	// No characters yet: nothing selected, and XP goes nowhere.
+	// No characters yet: no party, and XP goes nowhere.
 	if _, ok, err := s.SelectedCharacter(ctx, user); err != nil || ok {
 		t.Fatalf("SelectedCharacter with no characters: ok=%v err=%v", ok, err)
 	}
-	if up, err := s.AddXPToSelected(ctx, user, 100); err != nil || up != nil {
-		t.Fatalf("AddXPToSelected with no characters = %+v, %v", up, err)
+	if ups, err := s.AddPartyXP(ctx, user, 100); err != nil || len(ups) != 0 {
+		t.Fatalf("AddPartyXP with no characters = %+v, %v", ups, err)
 	}
 
-	s.AddCaught(ctx, user, game.Caught{CharacterID: "fern", Level: 1, Moves: []string{"zoltraak"}})
-	s.AddCaught(ctx, user, game.Caught{CharacterID: "stark", Level: 1})
+	for _, id := range []string{"fern", "stark", "eisen"} {
+		if _, err := s.AddCaught(ctx, user, game.Caught{CharacterID: id, Level: 1, Nature: "jolly", Moves: []string{"slash"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
-	// The first catch is selected automatically.
+	// The first catch leads the party automatically.
 	sel, ok, err := s.SelectedCharacter(ctx, user)
-	if err != nil || !ok || sel.Idx != 1 || !slices.Equal(sel.Moves, []string{"zoltraak"}) {
+	if err != nil || !ok || sel.Idx != 1 || sel.Nature != "jolly" || !slices.Equal(sel.Moves, []string{"slash"}) {
 		t.Fatalf("SelectedCharacter = %+v, %v, %v", sel, ok, err)
 	}
 
-	if ok, err := s.SelectCharacter(ctx, user, 99); err != nil || ok {
-		t.Fatalf("selecting a missing number: ok=%v err=%v", ok, err)
+	if err := s.SetParty(ctx, user, []int{2, 99}); !errors.Is(err, ErrNotOwned) {
+		t.Fatalf("a party with a number the user does not own: %v", err)
 	}
-	if ok, err := s.SelectCharacter(ctx, user, 2); err != nil || !ok {
-		t.Fatalf("SelectCharacter(2): ok=%v err=%v", ok, err)
+	if err := s.SetParty(ctx, user, []int{2, 3}); err != nil {
+		t.Fatal(err)
+	}
+	party, err := s.Party(ctx, user)
+	if err != nil || len(party) != 2 || party[0].Idx != 2 || party[1].Idx != 3 {
+		t.Fatalf("Party = %+v, %v", party, err)
 	}
 
-	// 75 XP takes level 1 to level 2, and only the selected character (#2) gets it.
-	up, err := s.AddXPToSelected(ctx, user, 80)
-	if err != nil || up == nil || up.Idx != 2 || up.NewLevel != 2 {
-		t.Fatalf("AddXPToSelected = %+v, %v", up, err)
+	// The leader (#2) gets all 150 XP: level 2 needs 75, so it reaches level 2 with 75 left over.
+	// #3 gets half, 75, exactly enough for level 2. #1 is not in the party and gets nothing.
+	ups, err := s.AddPartyXP(ctx, user, 150)
+	if err != nil || len(ups) != 2 {
+		t.Fatalf("AddPartyXP = %+v, %v", ups, err)
 	}
-	stark, _, _ := s.GetCharacter(ctx, user, 2)
-	fern, _, _ := s.GetCharacter(ctx, user, 1)
-	if stark.Level != 2 || stark.XP != 5 || fern.Level != 1 {
-		t.Fatalf("after XP: stark=%+v fern=%+v", stark, fern)
+	leader, _, _ := s.GetCharacter(ctx, user, 2)
+	second, _, _ := s.GetCharacter(ctx, user, 3)
+	outside, _, _ := s.GetCharacter(ctx, user, 1)
+	if leader.Level != 2 || leader.XP != 75 || second.Level != 2 || second.XP != 0 || outside.Level != 1 {
+		t.Fatalf("after XP: leader=%d/%d second=%d/%d outside=%d",
+			leader.Level, leader.XP, second.Level, second.XP, outside.Level)
 	}
 
 	if err := s.SetMoves(ctx, user, 2, []string{"slash", "counter_blow"}); err != nil {
 		t.Fatal(err)
 	}
-	stark, _, _ = s.GetCharacter(ctx, user, 2)
-	if !slices.Equal(stark.Moves, []string{"slash", "counter_blow"}) {
-		t.Fatalf("moves = %v", stark.Moves)
+	evs := data.Stats{Attack: 10, Speed: 3}
+	if err := s.SetEVs(ctx, user, 2, evs); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok, _ := s.GetCharacter(ctx, user, 3); ok {
-		t.Fatal("GetCharacter found a number the user does not have")
+	leader, _, _ = s.GetCharacter(ctx, user, 2)
+	if !slices.Equal(leader.Moves, []string{"slash", "counter_blow"}) || leader.EVs != evs {
+		t.Fatalf("moves %v, EVs %+v", leader.Moves, leader.EVs)
 	}
 }

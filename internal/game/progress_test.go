@@ -37,19 +37,43 @@ func TestAddXP(t *testing.T) {
 func TestCalcStats(t *testing.T) {
 	base := data.Stats{HP: 100, Attack: 100, Defense: 100, MagicAttack: 100, MagicDefense: 100, Speed: 100}
 	zero := data.Stats{}
+	hardy, _ := data.NatureByID("hardy")     // neutral
+	adamant, _ := data.NatureByID("adamant") // +Attack, -Magic Attack
 
-	// At level 100 with no rolls, HP = 200+100+10 and others = 200+5.
-	s := CalcStats(base, zero, 100)
+	// At level 100 with no IVs or EVs, HP = 200+100+10 and others = 200+5.
+	s := CalcStats(base, zero, zero, 100, hardy)
 	if s.HP != 310 || s.Attack != 205 || s.Speed != 205 {
 		t.Errorf("level 100 stats = %+v", s)
 	}
+	// A nature changes its two stats by 10%, rounding down.
+	s = CalcStats(base, zero, zero, 100, adamant)
+	if s.Attack != 225 || s.MagicAttack != 184 || s.Defense != 205 {
+		t.Errorf("adamant stats = %+v", s)
+	}
+	// 252 EVs add 63 points at level 100.
+	evs := data.Stats{Speed: 252}
+	if got := CalcStats(base, zero, evs, 100, hardy).Speed; got != 268 {
+		t.Errorf("Speed with 252 EVs = %d, want 268", got)
+	}
 	// Higher rolls and levels never make a stat lower.
 	perfect := data.Stats{HP: MaxIV, Attack: MaxIV, Defense: MaxIV, MagicAttack: MaxIV, MagicDefense: MaxIV, Speed: MaxIV}
-	if CalcStats(base, perfect, 50).Attack <= CalcStats(base, zero, 50).Attack {
+	if CalcStats(base, perfect, zero, 50, hardy).Attack <= CalcStats(base, zero, zero, 50, hardy).Attack {
 		t.Error("perfect rolls did not raise Attack")
 	}
-	if CalcStats(base, zero, 51).Attack < CalcStats(base, zero, 50).Attack {
+	if CalcStats(base, zero, zero, 51, hardy).Attack < CalcStats(base, zero, zero, 50, hardy).Attack {
 		t.Error("a higher level lowered Attack")
+	}
+}
+
+func TestAddEVs(t *testing.T) {
+	evs := AddEVs(data.Stats{Attack: 250}, data.Stats{Attack: 3, Speed: 2})
+	if evs.Attack != MaxEVPerStat || evs.Speed != 2 {
+		t.Errorf("per-stat cap: %+v", evs)
+	}
+	full := data.Stats{HP: 252, Attack: 252, Defense: 5} // 509 total
+	evs = AddEVs(full, data.Stats{Speed: 3})
+	if evs.Total() != MaxEVTotal || evs.Speed != 1 {
+		t.Errorf("total cap: %+v", evs)
 	}
 }
 
@@ -88,8 +112,8 @@ func TestCheckLearn(t *testing.T) {
 		move  string
 		want  error
 	}{
-		{20, []string{"zoltraak"}, "rapid_barrage", nil},
-		{19, []string{"zoltraak"}, "rapid_barrage", ErrLevelTooLow},
+		{12, []string{"zoltraak"}, "rapid_barrage", nil},
+		{11, []string{"zoltraak"}, "rapid_barrage", ErrLevelTooLow},
 		{50, []string{"zoltraak"}, "zoltraak", ErrAlreadyKnown},
 		{50, nil, "axe_cleave", ErrNotInSet},
 		{50, nil, "nope", ErrUnknownMove},

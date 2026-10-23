@@ -12,6 +12,11 @@ import (
 // guildOnly limits a command to servers (no DMs).
 var guildOnly = []discord.InteractionContextType{discord.InteractionContextTypeGuild}
 
+// numberOption is the optional "number" option shared by several commands.
+func numberOption(description string) discord.ApplicationCommandOptionInt {
+	return discord.ApplicationCommandOptionInt{Name: "number", Description: description, MinValue: omit.Ptr(1)}
+}
+
 // commands is the list registered with Discord on startup.
 var commands = []discord.ApplicationCommandCreate{
 	discord.SlashCommandCreate{Name: "ping", Description: "Check that the bot is alive"},
@@ -34,7 +39,7 @@ var commands = []discord.ApplicationCommandCreate{
 	},
 	discord.SlashCommandCreate{
 		Name:        "select",
-		Description: "Choose the character that gains XP when you chat",
+		Description: "Make a character your party leader",
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionInt{
 				Name: "number", Description: "Its number in /collection", Required: true, MinValue: omit.Ptr(1),
@@ -45,27 +50,48 @@ var commands = []discord.ApplicationCommandCreate{
 		Name:        "info",
 		Description: "Show a character's stats and moves",
 		Options: []discord.ApplicationCommandOption{
-			discord.ApplicationCommandOptionInt{
-				Name: "number", Description: "Defaults to your selected character", MinValue: omit.Ptr(1),
-			},
+			numberOption("Defaults to your party leader"),
 		},
 	},
 	discord.SlashCommandCreate{
 		Name:        "moves",
-		Description: "Show your selected character's moves and what it can learn",
+		Description: "Show a character's moves and what it can learn",
+		Options: []discord.ApplicationCommandOption{
+			numberOption("Defaults to your party leader"),
+		},
 	},
 	discord.SlashCommandCreate{
 		Name:        "learn",
-		Description: "Teach your selected character a move",
+		Description: "Teach a character a move",
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionString{
 				Name: "move", Description: "The move to learn", Required: true, Autocomplete: true,
+			},
+			numberOption("Defaults to your party leader"),
+		},
+	},
+	discord.SlashCommandCreate{
+		Name:        "party",
+		Description: "Manage your party of up to 4: it battles together and shares chat XP",
+		Options: []discord.ApplicationCommandOption{
+			discord.ApplicationCommandOptionSubCommand{Name: "view", Description: "Show your party"},
+			discord.ApplicationCommandOptionSubCommand{
+				Name: "add", Description: "Add a character to your party",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionInt{Name: "number", Description: "Its number in /collection", Required: true, MinValue: omit.Ptr(1)},
+				},
+			},
+			discord.ApplicationCommandOptionSubCommand{
+				Name: "remove", Description: "Take a character out of your party",
+				Options: []discord.ApplicationCommandOption{
+					discord.ApplicationCommandOptionInt{Name: "number", Description: "Its number in /collection", Required: true, MinValue: omit.Ptr(1)},
+				},
 			},
 		},
 	},
 	discord.SlashCommandCreate{
 		Name:        "battle",
-		Description: "Challenge another player to a 1v1 battle with your selected character",
+		Description: "Challenge another player to a party battle",
 		Contexts:    guildOnly,
 		Options: []discord.ApplicationCommandOption{
 			discord.ApplicationCommandOptionUser{Name: "opponent", Description: "Who to battle", Required: true},
@@ -97,6 +123,11 @@ func (b *Bot) newRouter() *handler.Mux {
 	r.Command("/collection", b.handleCollection)
 	r.Command("/setspawn", b.handleSetSpawn)
 	r.Command("/select", b.handleSelect)
+	r.Route("/party", func(r handler.Router) {
+		r.Command("/view", b.handlePartyView)
+		r.Command("/add", b.handlePartyAdd)
+		r.Command("/remove", b.handlePartyRemove)
+	})
 	r.Command("/info", b.handleInfo)
 	r.Command("/moves", b.handleMoves)
 	r.Command("/learn", b.handleLearn)
@@ -107,7 +138,7 @@ func (b *Bot) newRouter() *handler.Mux {
 	r.Component("/battle-accept/{id}", b.handleBattleAccept)
 	r.Component("/battle-decline/{id}", b.handleBattleDecline)
 	r.Component("/battle-choose/{id}", b.handleBattleChoose)
-	r.Component("/battle-move/{id}/{turn}/{idx}", b.handleBattleMove)
+	r.Component("/battle-act/{id}/{step}/{action}", b.handleBattleAct)
 	r.Component("/battle-flee/{id}", b.handleBattleFlee)
 
 	// When a handler returns an error, log it and tell the player something went wrong.
