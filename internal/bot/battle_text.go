@@ -101,6 +101,109 @@ func eventText(ab *activeBattle, e game.Event) string {
 		return statChangeText(who, e)
 	case game.EvWin:
 		return fmt.Sprintf("**%s wins!**", player)
+
+	case game.EvWeatherStart:
+		return weatherStart[e.Weather]
+	case game.EvWeatherEnd:
+		return weatherEnd[e.Weather]
+	case game.EvWeatherDamage:
+		return fmt.Sprintf("%s is buffeted by the %s! (%d)", who, strings.ToLower(e.Weather.String()), e.Amount)
+	case game.EvTerrainStart:
+		return terrainStart[e.Terrain]
+	case game.EvTerrainEnd:
+		return fmt.Sprintf("The %s faded.", e.Terrain)
+	case game.EvTerrainHeal:
+		return fmt.Sprintf("%s was healed by the Overgrowth. (+%d)", who, e.Amount)
+	case game.EvFieldBlocked:
+		if e.Terrain != data.NoTerrain {
+			return fmt.Sprintf("%s is protected by the %s!", who, e.Terrain)
+		}
+		return fmt.Sprintf("The %s protects %s!", e.Weather, who)
+	case game.EvSideStart:
+		return sideStartText(player, e)
+	case game.EvSideEnd:
+		return fmt.Sprintf("%s's %s wore off.", player, e.SideCond)
+	case game.EvHazardsCleared:
+		return "The hazards and wards were blown away!"
+	case game.EvHazardDamage:
+		return fmt.Sprintf("%s was hurt by the %s! (%d)", who, e.SideCond, e.Amount)
+	case game.EvSealsAbsorbed:
+		return who + " absorbed the Curse Seals!"
+	case game.EvReversalStart:
+		return "Time twisted! Slower characters will move first."
+	case game.EvReversalEnd:
+		return "Time returned to normal."
+	case game.EvProtecting:
+		return who + " protected itself!"
+	case game.EvProtected:
+		return who + " protected itself from the attack!"
+	case game.EvSubstitute:
+		return who + " made an illusory double!"
+	case game.EvSubDamage:
+		return fmt.Sprintf("The double took the hit for %s! (%d)", who, e.Amount)
+	case game.EvSubBroke:
+		return who + "'s double vanished!"
+	case game.EvCharging:
+		return fmt.Sprintf("%s is charging **%s**!", who, e.Move)
+	case game.EvMustRecharge:
+		return who + " must recharge!"
+	case game.EvTrapped:
+		return who + " can no longer escape!"
+	case game.EvPartiallyTrapped:
+		return who + " is caught in the vines!"
+	case game.EvTrapDamage:
+		return fmt.Sprintf("%s is hurt by the vines! (%d)", who, e.Amount)
+	case game.EvTrapEnd:
+		return who + " was freed!"
+	case game.EvTaunted:
+		return who + " fell for the provocation!"
+	case game.EvTauntEnd:
+		return who + " calmed down."
+	case game.EvTauntBlocked:
+		return fmt.Sprintf("%s can't use **%s** after the provocation!", who, e.Move)
+	case game.EvEncored:
+		return fmt.Sprintf("%s is compelled to repeat **%s**!", who, e.Move)
+	case game.EvEncoreEnd:
+		return who + " is free of the compulsion."
+	}
+	return ""
+}
+
+var weatherStart = map[data.Weather]string{
+	data.Heatwave:  "A scorching heatwave began!",
+	data.Storm:     "A storm rolled in!",
+	data.Sandstorm: "A sandstorm kicked up!",
+	data.Blizzard:  "A blizzard began to blow!",
+}
+
+var weatherEnd = map[data.Weather]string{
+	data.Heatwave:  "The heatwave faded.",
+	data.Storm:     "The storm passed.",
+	data.Sandstorm: "The sandstorm died down.",
+	data.Blizzard:  "The blizzard stopped.",
+}
+
+var terrainStart = map[data.Terrain]string{
+	data.ManaField:    "Mana surged through the ground!",
+	data.SacredGround: "The ground became sacred!",
+	data.Overgrowth:   "Plants overran the battlefield!",
+	data.Mist:         "Mist covered the battlefield!",
+}
+
+func sideStartText(player string, e game.Event) string {
+	switch e.SideCond {
+	case data.PhysicalWard:
+		return fmt.Sprintf("A Physical Ward guards %s's side!", player)
+	case data.MagicWard:
+		return fmt.Sprintf("A Magic Ward guards %s's side!", player)
+	case data.Tailwind:
+		return fmt.Sprintf("A tailwind blows behind %s's side!", player)
+	case data.ManaMines:
+		return fmt.Sprintf("Mana mines were hidden around %s's side!", player)
+	case data.Caltrops:
+		return fmt.Sprintf("Caltrops were scattered around %s's side! (%d)", player, e.Amount)
+	case data.CurseSeals:
+		return fmt.Sprintf("Curse seals were planted around %s's side! (%d)", player, e.Amount)
 	}
 	return ""
 }

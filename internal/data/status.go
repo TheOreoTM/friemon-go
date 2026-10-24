@@ -35,9 +35,13 @@ func (s Condition) String() string {
 type Volatile int
 
 const (
-	NoVolatile Volatile = iota
-	Confusion           // 1-4 turns; 33% chance to hit itself instead of moving
-	Flinch              // skips its move this turn; only works if it had not moved yet
+	NoVolatile  Volatile = iota
+	Confusion            // 1-4 turns; 33% chance to hit itself instead of moving
+	Flinch               // skips its move this turn; only works if it had not moved yet
+	Trap                 // cannot switch out while the user stays on the field
+	PartialTrap          // cannot switch out and loses 1/8 HP a turn, for 4-5 turns
+	Taunt                // can only use damaging moves, for 3 turns
+	Encore               // must repeat its last move, for 3 turns
 )
 
 // statusImmunities lists types that can never get a status.

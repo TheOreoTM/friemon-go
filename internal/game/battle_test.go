@@ -92,7 +92,8 @@ func TestRandomBattlesAlwaysFinish(t *testing.T) {
 				t.Fatalf("game %d did not finish", game)
 			}
 			for s := range b.Sides {
-				if b.NeedsReplacement(s) {
+				// A replacement can faint to hazards on the way in, so this may take several tries.
+				for b.NeedsReplacement(s) {
 					for i := range b.Sides[s].Party {
 						if b.CanSwitchTo(s, i) {
 							if _, err := b.Replace(s, i); err != nil {
@@ -103,14 +104,22 @@ func TestRandomBattlesAlwaysFinish(t *testing.T) {
 					}
 				}
 			}
+			if b.Over() {
+				break
+			}
 			var actions [2]Action
 			for s := range actions {
 				f := b.Active(s)
-				actions[s] = Action{Index: r.IntN(len(f.Moves))}
-				for f.HasPP() && f.Moves[actions[s].Index].PP == 0 {
-					actions[s].Index = r.IntN(len(f.Moves))
+				var usable []int
+				for i := range f.Moves {
+					if f.CanUse(i) {
+						usable = append(usable, i)
+					}
 				}
-				if r.IntN(6) == 0 { // switch sometimes
+				if len(usable) > 0 {
+					actions[s] = Action{Index: usable[r.IntN(len(usable))]}
+				}
+				if r.IntN(6) == 0 && !f.Trapped() { // switch sometimes
 					for i := range b.Sides[s].Party {
 						if b.CanSwitchTo(s, i) {
 							actions[s] = Action{Switch: true, Index: i}
@@ -119,6 +128,16 @@ func TestRandomBattlesAlwaysFinish(t *testing.T) {
 				}
 			}
 			play(t, b, r, actions)
+			for p := b.PivotPending(); p >= 0; p = b.PivotPending() {
+				for i := range b.Sides[p].Party {
+					if b.CanSwitchTo(p, i) {
+						if _, err := b.ChoosePivot(r, p, i); err != nil {
+							t.Fatal(err)
+						}
+						break
+					}
+				}
+			}
 			for s := range b.Sides {
 				for _, f := range b.Sides[s].Party {
 					if f.HP < 0 || f.HP > f.Stats.HP {
@@ -263,9 +282,10 @@ func TestDeepCurseResetsOnSwitch(t *testing.T) {
 
 func TestBurnHalvesPhysicalDamage(t *testing.T) {
 	user, target := fighter(t, "stark", 50), fighter(t, "eisen", 50)
-	normal, _ := damage(rand.New(rand.NewPCG(1, 1)), user, target, tackle, 1, false)
+	b := duel(user, target)
+	normal, _ := b.damage(rand.New(rand.NewPCG(1, 1)), user, target, 1, tackle, 1, false, false)
 	user.Condition = data.Burn
-	burned, _ := damage(rand.New(rand.NewPCG(1, 1)), user, target, tackle, 1, false)
+	burned, _ := b.damage(rand.New(rand.NewPCG(1, 1)), user, target, 1, tackle, 1, false, false)
 	if burned > normal/2+1 || burned < normal/2-1 {
 		t.Errorf("burned damage %d, normal %d; want about half", burned, normal)
 	}
@@ -314,12 +334,12 @@ func TestRestSleepsExactlyTwoTurns(t *testing.T) {
 func TestBound(t *testing.T) {
 	r := newRand()
 	f := withMove(fighter(t, "fern", 50), nothing)
-	speed := f.speed()
-	inflict(r, f, data.Bound)
-	if f.speed() != speed/2 {
-		t.Errorf("bound speed %d, want %d", f.speed(), speed/2)
-	}
 	b := duel(f, withMove(fighter(t, "eisen", 50), nothing))
+	speed := b.speed(0)
+	inflict(r, f, data.Bound)
+	if b.speed(0) != speed/2 {
+		t.Errorf("bound speed %d, want %d", b.speed(0), speed/2)
+	}
 	stuck := 0
 	const turns = 2000
 	for range turns {

@@ -25,9 +25,17 @@ func (c Category) String() string {
 type Flag uint
 
 const (
-	FlagContact Flag = 1 << iota // touches the target
-	FlagSound                    // a sound-based move
-	FlagRest                     // special: the user sleeps for 2 turns and fully heals
+	FlagContact      Flag = 1 << iota // touches the target
+	FlagSound                         // a sound-based move
+	FlagRest                          // special: the user sleeps for 2 turns and fully heals
+	FlagProtect                       // blocks moves aimed at the user this turn; fails more often if repeated
+	FlagSubstitute                    // spends 1/4 HP to make a decoy that takes hits
+	FlagCharge                        // spends a turn charging, then hits on the next
+	FlagRecharge                      // the user must rest on the next turn
+	FlagPivot                         // the user switches out after hitting
+	FlagGround                        // shakes the ground; weaker in Overgrowth
+	FlagClearHazards                  // removes hazards from both sides and the target's wards
+	FlagReversal                      // starts (or ends) Reversal Field: slower characters move first
 )
 
 // StatChange raises (positive) or lowers (negative) a stat by a number of stages.
@@ -65,6 +73,11 @@ type Move struct {
 	Recoil      int // percent of damage dealt that hurts the user
 	Heal        int // percent of max HP the user recovers (status moves)
 	Effects     []MoveEffect
+	Weather     Weather       // weather this move starts
+	Terrain     Terrain       // terrain this move starts
+	Side        SideCondition // ward or Tailwind on the user's side, or a hazard on the target's
+	SureHitIn   Weather       // never misses in this weather
+	NoChargeIn  Weather       // a charge move that fires at once in this weather
 	Description string
 }
 
@@ -94,8 +107,8 @@ var Moves = []Move{
 	{ID: "cutting_magic", Name: "Cutting Magic", Type: TypeDestruction, Category: Magical, Power: 70, Accuracy: 100, PP: 20, CritStage: 1,
 		Description: "Cuts anything the caster believes can be cut. Lands critical hits more often."},
 	{ID: "lightning_magic", Name: "Lightning Magic", Type: TypeDestruction, Category: Magical, Power: 90, Accuracy: 100, PP: 15,
-		Effects:     []MoveEffect{{Chance: 10, Status: Bound}},
-		Description: "Calls down lightning. 10% chance to leave the target Bound."},
+		Effects: []MoveEffect{{Chance: 10, Status: Bound}}, SureHitIn: Storm,
+		Description: "Calls down lightning. 10% chance to leave the target Bound. Never misses in a Storm."},
 	{ID: "hellfire", Name: "Hellfire Magic", Type: TypeDestruction, Category: Magical, Power: 90, Accuracy: 100, PP: 15,
 		Effects:     []MoveEffect{{Chance: 10, Status: Burn}},
 		Description: "Summons the fires of hell. 10% chance to burn the target."},
@@ -148,8 +161,8 @@ var Moves = []Move{
 	{ID: "heroic_strike", Name: "Heroic Strike", Type: TypeMartial, Category: Physical, Power: 90, Accuracy: 100, PP: 15, Flags: FlagContact,
 		Description: "A sword swing with the full weight of a hero's resolve."},
 	{ID: "ground_splitter", Name: "Ground Splitter", Type: TypeMartial, Category: Physical, Power: 100, Accuracy: 90, PP: 10,
-		Effects:     []MoveEffect{{Chance: 30, Volatile: Flinch}},
-		Description: "Smashes the earth with an axe. 30% chance to make the target flinch."},
+		Flags: FlagGround, Effects: []MoveEffect{{Chance: 30, Volatile: Flinch}},
+		Description: "Smashes the earth with an axe. 30% chance to make the target flinch. Weaker in Overgrowth."},
 	{ID: "axe_cleave", Name: "Axe Cleave", Type: TypeMartial, Category: Physical, Power: 120, Accuracy: 100, PP: 15, Flags: FlagContact, Recoil: 33,
 		Description: "An all-out overhead swing. The user takes 1/3 of the damage dealt."},
 	{ID: "iron_body", Name: "Iron Body", Type: TypeMartial, Category: Status, PP: 20,
@@ -191,8 +204,8 @@ var Moves = []Move{
 	{ID: "thorn_lash", Name: "Thorn Lash", Type: TypeNature, Category: Physical, Power: 25, Accuracy: 100, PP: 20, Flags: FlagContact, MinHits: 2, MaxHits: 5,
 		Description: "Whips the target with thorny vines. Hits 2 to 5 times."},
 	{ID: "frost_magic", Name: "Frost Magic", Type: TypeNature, Category: Magical, Power: 90, Accuracy: 100, PP: 10,
-		Effects:     []MoveEffect{{Chance: 10, Status: Freeze}},
-		Description: "Freezing wind from the northern lands. 10% chance to freeze the target."},
+		Effects: []MoveEffect{{Chance: 10, Status: Freeze}}, SureHitIn: Blizzard,
+		Description: "Freezing wind from the northern lands. 10% chance to freeze the target. Never misses in a Blizzard."},
 	{ID: "drowsy_pollen", Name: "Drowsy Pollen", Type: TypeNature, Category: Status, Accuracy: 75, PP: 15,
 		Effects:     []MoveEffect{{Status: Sleep}},
 		Description: "A cloud of sleepy pollen. Puts the target to sleep."},
@@ -201,6 +214,76 @@ var Moves = []Move{
 		Description: "Draws strength from growing things. Raises Attack and Magic Attack."},
 	{ID: "petal_storm", Name: "Petal Storm", Type: TypeNature, Category: Magical, Power: 110, Accuracy: 85, PP: 10,
 		Description: "A storm of razor-sharp petals. Powerful but hard to aim."},
+
+	// Weather.
+	{ID: "heatwave", Name: "Heatwave", Type: TypeDestruction, Category: Status, PP: 5, Weather: Heatwave,
+		Description: "Scorches the battlefield for 5 turns. Destruction moves are stronger, Nature moves weaker, and nobody can be frozen."},
+	{ID: "storm_call", Name: "Storm Call", Type: TypeNature, Category: Status, PP: 5, Weather: Storm,
+		Description: "Summons a storm for 5 turns. Nature moves are stronger, Destruction moves weaker, and nobody can be burned."},
+	{ID: "sandstorm", Name: "Sandstorm", Type: TypeMartial, Category: Status, PP: 10, Weather: Sandstorm,
+		Description: "Whips up sand for 5 turns. Everyone but Martial types is hurt each turn; Martial types gain Magic Defense."},
+	{ID: "blizzard", Name: "Blizzard", Type: TypeNature, Category: Status, PP: 10, Weather: Blizzard,
+		Description: "Calls a blizzard for 5 turns. Everyone but Nature types is hurt each turn; Nature types gain Defense."},
+
+	// Terrain.
+	{ID: "mana_field", Name: "Mana Field", Type: TypeDestruction, Category: Status, PP: 10, Terrain: ManaField,
+		Description: "Charges the ground with mana for 5 turns. Destruction moves are stronger and nobody can fall asleep."},
+	{ID: "sacred_ground", Name: "Sacred Ground", Type: TypeHoly, Category: Status, PP: 10, Terrain: SacredGround,
+		Description: "Blesses the ground for 5 turns. Holy moves are stronger, Curse moves weaker, and priority moves cannot hit."},
+	{ID: "overgrowth", Name: "Overgrowth", Type: TypeNature, Category: Status, PP: 10, Terrain: Overgrowth,
+		Description: "Covers the ground in plants for 5 turns. Nature moves are stronger and everyone heals a little each turn."},
+	{ID: "mist", Name: "Mist", Type: TypeBarrier, Category: Status, PP: 10, Terrain: Mist,
+		Description: "Fills the field with mist for 5 turns. Nobody can get a new condition or be confused, and Curse moves are weaker."},
+
+	// Wards and field control.
+	{ID: "physical_ward", Name: "Physical Ward", Type: TypeBarrier, Category: Status, PP: 20, Side: PhysicalWard,
+		Description: "A barrier that halves physical damage to your side for 5 turns."},
+	{ID: "magic_ward", Name: "Magic Ward", Type: TypeBarrier, Category: Status, PP: 20, Side: MagicWard,
+		Description: "A barrier that halves magical damage to your side for 5 turns."},
+	{ID: "tailwind", Name: "Tailwind", Type: TypeNature, Category: Status, PP: 15, Side: Tailwind,
+		Description: "A wind at your back doubles your side's Speed for 4 turns."},
+	{ID: "reversal_field", Name: "Reversal Field", Type: TypeCurse, Category: Status, PP: 5, Priority: -7, Flags: FlagReversal,
+		Description: "Twists time for 5 turns so slower characters move first. Using it again ends it. Always goes last."},
+	{ID: "full_barrier", Name: "Full Barrier", Type: TypeBarrier, Category: Status, PP: 10, Priority: 4, Flags: FlagProtect,
+		Description: "Blocks every move aimed at the user this turn. Likely to fail if used twice in a row."},
+	{ID: "illusory_double", Name: "Illusory Double", Type: TypeCurse, Category: Status, PP: 10, Flags: FlagSubstitute,
+		Description: "Spends 1/4 of max HP to make an illusion that takes hits in the user's place."},
+
+	// Hazards.
+	{ID: "mana_mines", Name: "Mana Mines", Type: TypeDestruction, Category: Status, PP: 20, Side: ManaMines,
+		Description: "Hides mana mines on the opponent's side. They hurt anyone switching in, more so if weak to Destruction."},
+	{ID: "caltrops", Name: "Caltrops", Type: TypeMartial, Category: Status, PP: 20, Side: Caltrops,
+		Description: "Scatters spikes on the opponent's side that hurt anyone switching in. Stacks up to 3 times."},
+	{ID: "curse_seals", Name: "Curse Seals", Type: TypeCurse, Category: Status, PP: 20, Side: CurseSeals,
+		Description: "Plants seals on the opponent's side that curse anyone switching in. Two layers deeply curse."},
+	{ID: "clearing_wind", Name: "Clearing Wind", Type: TypeNature, Category: Status, PP: 15, Flags: FlagClearHazards,
+		Description: "A gust that blows away hazards on both sides and the opponent's wards."},
+
+	// Charge, recharge, traps, control and pivots.
+	{ID: "sunlight_lance", Name: "Sunlight Lance", Type: TypeNature, Category: Magical, Power: 120, Accuracy: 100, PP: 10,
+		Flags: FlagCharge, NoChargeIn: Heatwave,
+		Description: "Gathers light for a turn, then fires. Fires at once in a Heatwave."},
+	{ID: "annihilation", Name: "Annihilation Beam", Type: TypeDestruction, Category: Magical, Power: 150, Accuracy: 90, PP: 5,
+		Flags:       FlagRecharge,
+		Description: "A beam that erases everything in its path. The user must rest on the next turn."},
+	{ID: "binding_chains", Name: "Binding Chains", Type: TypeHoly, Category: Status, Accuracy: 0, PP: 5,
+		Effects:     []MoveEffect{{Volatile: Trap}},
+		Description: "Holy chains stop the target from switching out while the user stays in."},
+	{ID: "vine_snare", Name: "Vine Snare", Type: TypeNature, Category: Physical, Power: 35, Accuracy: 90, PP: 15, Flags: FlagContact,
+		Effects:     []MoveEffect{{Volatile: PartialTrap}},
+		Description: "Vines wrap the target for 4-5 turns. It cannot switch out and loses 1/8 of its HP each turn."},
+	{ID: "provoke", Name: "Provoke", Type: TypeMartial, Category: Status, Accuracy: 100, PP: 20,
+		Effects:     []MoveEffect{{Volatile: Taunt}},
+		Description: "Goads the target so it can only use damaging moves for 3 turns."},
+	{ID: "compulsion", Name: "Compulsion", Type: TypeCurse, Category: Status, Accuracy: 100, PP: 5,
+		Effects:     []MoveEffect{{Volatile: Encore}},
+		Description: "Demon magic that forces the target to repeat its last move for 3 turns."},
+	{ID: "hit_and_run", Name: "Hit and Run", Type: TypeMartial, Category: Physical, Power: 70, Accuracy: 100, PP: 20,
+		Flags:       FlagContact | FlagPivot,
+		Description: "Strikes, then switches out for another party member."},
+	{ID: "flash_retreat", Name: "Flash Retreat", Type: TypeDestruction, Category: Magical, Power: 70, Accuracy: 100, PP: 20,
+		Flags:       FlagPivot,
+		Description: "Fires a spell, then flashes back to switch out for another party member."},
 }
 
 var movesByID = func() map[string]Move {

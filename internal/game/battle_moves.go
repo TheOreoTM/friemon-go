@@ -11,28 +11,64 @@ const maxStage = 6
 // confusionHit is the typeless attack a confused fighter uses on itself.
 var confusionHit = data.Move{Name: "confusion", Type: data.NoType, Category: data.Physical, Power: 40}
 
-// useMove runs side s's move: checks whether it can act, spends PP, rolls accuracy,
-// then deals damage and applies effects.
+// useMove runs side s's move: checks whether it can act, spends PP, handles charging,
+// field moves and protection, rolls accuracy, then deals damage and applies effects.
 func (b *Battle) useMove(r *rand.Rand, s, slot int) []Event {
 	user, target := b.Active(s), b.Active(1-s)
 	ev, ok := b.canMove(r, s, user)
 	if !ok {
+		user.chargeSlot = -1 // losing a turn also loses a charge
+		user.protectChain = 0
 		return ev
 	}
 
+	charged := user.chargeSlot >= 0 // second turn of a charge move: the PP is already spent
 	var move data.Move
-	if user.HasPP() {
-		ms := user.Moves[slot]
-		ms.PP--
-		move = ms.Move
-	} else {
+	switch {
+	case charged:
+		move = user.Moves[user.chargeSlot].Move
+		user.chargeSlot = -1
+	case slot < 0 || !user.HasPP():
 		ev = append(ev, Event{Kind: EvStruggle, Side: s, Name: user.Name})
 		move = data.Struggle
+		user.lastSlot = -1
+	default:
+		ms := user.Moves[slot]
+		move = ms.Move
+		if user.Taunted() && move.Category == data.Status {
+			return append(ev, Event{Kind: EvTauntBlocked, Side: s, Name: user.Name, Move: move.Name})
+		}
+		ms.PP--
+		user.lastSlot = slot
+	}
+	if !move.Has(data.FlagProtect) {
+		user.protectChain = 0
+	}
+
+	if move.Has(data.FlagCharge) && !charged && !(move.NoChargeIn != data.NoWeather && b.Weather == move.NoChargeIn) {
+		user.chargeSlot = slot
+		return append(ev, Event{Kind: EvCharging, Side: s, Name: user.Name, Move: move.Name})
 	}
 	ev = append(ev, Event{Kind: EvMove, Side: s, Name: user.Name, Move: move.Name})
 
-	if move.Has(data.FlagRest) {
-		return append(ev, rest(s, user)...)
+	// Moves that act on the user or the field, not the target.
+	switch {
+	case move.Has(data.FlagRest):
+		return append(ev, b.rest(s, user)...)
+	case move.Has(data.FlagProtect):
+		return append(ev, b.protect(r, s, user)...)
+	case move.Has(data.FlagSubstitute):
+		return append(ev, substitute(s, user)...)
+	case move.Weather != data.NoWeather:
+		return append(ev, b.setWeather(move.Weather)...)
+	case move.Terrain != data.NoTerrain:
+		return append(ev, b.setTerrain(move.Terrain)...)
+	case move.Side != data.NoSideCondition:
+		return append(ev, b.setSideCondition(s, move.Side)...)
+	case move.Has(data.FlagClearHazards):
+		return append(ev, b.clearHazards(s)...)
+	case move.Has(data.FlagReversal):
+		return append(ev, b.toggleReversal()...)
 	}
 
 	hitsFoe := move.Category != data.Status
@@ -42,10 +78,18 @@ func (b *Battle) useMove(r *rand.Rand, s, slot int) []Event {
 		}
 	}
 	if hitsFoe {
-		if target.Fainted() {
+		switch {
+		case target.Fainted():
 			return append(ev, Event{Kind: EvNoTarget})
+		case target.protected:
+			return append(ev, Event{Kind: EvProtected, Side: 1 - s, Name: target.Name})
+		case b.Terrain == data.SacredGround && move.Priority > 0:
+			return append(ev, Event{Kind: EvFieldBlocked, Side: 1 - s, Name: target.Name, Terrain: data.SacredGround})
+		case move.Category == data.Status && target.substituteHP > 0 && !move.Has(data.FlagSound):
+			return append(ev, Event{Kind: EvFail}) // the substitute takes it instead
 		}
-		if move.Accuracy > 0 && !accuracyHits(r, user, target, move.Accuracy) {
+		sureHit := move.SureHitIn != data.NoWeather && b.Weather == move.SureHitIn
+		if move.Accuracy > 0 && !sureHit && !accuracyHits(r, user, target, move.Accuracy) {
 			return append(ev, Event{Kind: EvMiss})
 		}
 	}
@@ -70,7 +114,7 @@ func (b *Battle) canMove(r *rand.Rand, s int, f *Fighter) (ev []Event, ok bool) 
 		f.Condition = data.NoCondition
 		ev = append(ev, e(EvWokeUp))
 	case data.Freeze:
-		if r.IntN(100) >= 20 {
+		if b.Weather != data.Heatwave && r.IntN(100) >= 20 {
 			return []Event{e(EvFrozenSolid)}, false
 		}
 		f.Condition = data.NoCondition
@@ -88,7 +132,7 @@ func (b *Battle) canMove(r *rand.Rand, s int, f *Fighter) (ev []Event, ok bool) 
 		} else {
 			ev = append(ev, e(EvIsConfused))
 			if r.IntN(3) == 0 {
-				dmg, _ := damage(r, f, f, confusionHit, 1, false)
+				dmg, _ := b.damage(r, f, f, s, confusionHit, 1, false, false)
 				dmg = min(dmg, f.HP)
 				f.HP -= dmg
 				hurt := e(EvConfusionHurt)
@@ -114,19 +158,30 @@ func (b *Battle) damagingMove(r *rand.Rand, s int, m data.Move) []Event {
 	}
 	eff := data.Effectiveness(m.Type, target.Types)
 
-	total, landed := 0, 0
+	total, landed, hitSubstitute := 0, 0, false
 	for range hits {
 		if target.Fainted() {
 			break
 		}
-		dmg, crit := damage(r, user, target, m, eff, true)
-		dmg = min(dmg, target.HP)
-		target.HP -= dmg
-		total += dmg
+		dmg, crit := b.damage(r, user, target, 1-s, m, eff, true, true)
 		landed++
 		if crit {
 			ev = append(ev, Event{Kind: EvCrit})
 		}
+		if target.substituteHP > 0 && !m.Has(data.FlagSound) {
+			hitSubstitute = true
+			dmg = min(dmg, target.substituteHP)
+			target.substituteHP -= dmg
+			total += dmg
+			ev = append(ev, Event{Kind: EvSubDamage, Side: 1 - s, Name: target.Name, Amount: dmg})
+			if target.substituteHP == 0 {
+				ev = append(ev, Event{Kind: EvSubBroke, Side: 1 - s, Name: target.Name})
+			}
+			continue
+		}
+		dmg = min(dmg, target.HP)
+		target.HP -= dmg
+		total += dmg
 		ev = append(ev, Event{Kind: EvDamage, Side: 1 - s, Name: target.Name, Amount: dmg})
 	}
 	if eff != 1 {
@@ -154,13 +209,25 @@ func (b *Battle) damagingMove(r *rand.Rand, s int, m data.Move) []Event {
 		ev = append(ev, Event{Kind: EvRecoil, Side: s, Name: user.Name, Amount: recoil})
 	}
 
-	// Effects on the target only happen if it is still standing, and fail quietly.
-	// Effects on the user (like a drop in Magic Attack) always happen.
+	// Effects on the target only happen if it is still standing and no substitute took the
+	// hit; they fail quietly. Effects on the user (like a drop in Magic Attack) always happen.
 	for _, e := range m.Effects {
 		if e.Self && !user.Fainted() {
 			ev = append(ev, b.applyEffect(r, s, e, true)...)
-		} else if !e.Self && !target.Fainted() {
+		} else if !e.Self && !target.Fainted() && !hitSubstitute {
 			ev = append(ev, b.applyEffect(r, s, e, false)...)
+		}
+	}
+
+	if m.Has(data.FlagRecharge) && !user.Fainted() {
+		user.mustRecharge = true
+	}
+	if m.Has(data.FlagPivot) && total > 0 && !user.Fainted() {
+		for i := range b.Sides[s].Party {
+			if b.CanSwitchTo(s, i) {
+				b.pivot = s // PlayTurn pauses until ChoosePivot
+				break
+			}
 		}
 	}
 	return ev
@@ -170,7 +237,11 @@ func (b *Battle) statusMove(r *rand.Rand, s int, m data.Move) []Event {
 	user := b.Active(s)
 	var ev []Event
 	if m.Heal > 0 {
-		if healed := heal(user, max(1, user.Stats.HP*m.Heal/100)); healed > 0 {
+		amount := max(1, user.Stats.HP*m.Heal/100)
+		if b.Weather == data.Heatwave {
+			amount = amount * 4 / 3 // heals are a third stronger in a Heatwave
+		}
+		if healed := heal(user, amount); healed > 0 {
 			ev = append(ev, Event{Kind: EvHeal, Side: s, Name: user.Name, Amount: healed})
 		}
 	}
@@ -197,6 +268,11 @@ func (b *Battle) applyEffect(r *rand.Rand, s int, e data.MoveEffect, loud bool) 
 	t := b.Active(ts)
 	ev := func(kind EventKind) Event { return Event{Kind: kind, Side: ts, Name: t.Name} }
 	var out []Event
+	fail := func(e Event) {
+		if loud {
+			out = append(out, e)
+		}
+	}
 
 	if e.CureStatus && t.Condition != data.NoCondition {
 		cured := ev(EvCured)
@@ -206,17 +282,17 @@ func (b *Battle) applyEffect(r *rand.Rand, s int, e data.MoveEffect, loud bool) 
 	}
 
 	if e.Status != data.NoCondition {
+		blockedBy, blocked := b.fieldBlocks(e.Status)
 		switch {
 		case t.Condition != data.NoCondition:
-			if loud {
-				out = append(out, ev(EvConditionFailed))
-			}
+			fail(ev(EvConditionFailed))
 		case data.ImmuneToStatus(e.Status, t.Types):
-			if loud {
-				immune := ev(EvImmune)
-				immune.Condition = e.Status
-				out = append(out, immune)
-			}
+			immune := ev(EvImmune)
+			immune.Condition = e.Status
+			fail(immune)
+		case blocked:
+			blockedBy.Side, blockedBy.Name = ts, t.Name
+			fail(blockedBy)
 		default:
 			inflict(r, t, e.Status)
 			got := ev(EvCondition)
@@ -227,11 +303,14 @@ func (b *Battle) applyEffect(r *rand.Rand, s int, e data.MoveEffect, loud bool) 
 
 	switch e.Volatile {
 	case data.Confusion:
-		if t.confusionTurns > 0 {
-			if loud {
-				out = append(out, ev(EvAlreadyConfused))
-			}
-		} else {
+		switch {
+		case t.confusionTurns > 0:
+			fail(ev(EvAlreadyConfused))
+		case b.Terrain == data.Mist:
+			blocked := ev(EvFieldBlocked)
+			blocked.Terrain = data.Mist
+			fail(blocked)
+		default:
 			t.confusionTurns = 2 + r.IntN(4) // counts down before each move: confused for 1-4 turns
 			out = append(out, ev(EvConfused))
 		}
@@ -239,6 +318,27 @@ func (b *Battle) applyEffect(r *rand.Rand, s int, e data.MoveEffect, loud bool) 
 		if !b.moved[ts] { // flinching only matters if the target has not acted yet
 			t.flinched = true
 		}
+	case data.Trap:
+		if t.Trapped() {
+			fail(Event{Kind: EvFail})
+		} else {
+			t.trapped = true
+			out = append(out, ev(EvTrapped))
+		}
+	case data.PartialTrap:
+		if t.trapTurns == 0 && !t.trapped {
+			t.trapTurns = 4 + r.IntN(2)
+			out = append(out, ev(EvPartiallyTrapped))
+		}
+	case data.Taunt:
+		if t.Taunted() {
+			fail(Event{Kind: EvFail})
+		} else {
+			t.tauntTurns = 3
+			out = append(out, ev(EvTaunted))
+		}
+	case data.Encore:
+		out = append(out, b.encore(ts, t, loud)...)
 	}
 
 	for _, sc := range e.Stats {
@@ -254,6 +354,23 @@ func (b *Battle) applyEffect(r *rand.Rand, s int, e data.MoveEffect, loud bool) 
 	return out
 }
 
+// encore forces the target to repeat its last move for 3 turns. If it has not acted yet
+// this turn, its move this turn changes too.
+func (b *Battle) encore(ts int, t *Fighter, loud bool) []Event {
+	if t.encoreTurns > 0 || t.lastSlot < 0 || t.Moves[t.lastSlot].PP == 0 {
+		if loud {
+			return []Event{{Kind: EvFail}}
+		}
+		return nil
+	}
+	t.encoreTurns, t.encoreSlot = 3, t.lastSlot
+	if b.turn != nil && !b.moved[ts] && !b.turn.actions[ts].Switch {
+		b.turn.actions[ts].Index = t.encoreSlot
+	}
+	return []Event{{Kind: EvEncored, Side: ts, Name: t.Name, Move: t.Moves[t.encoreSlot].Move.Name}}
+}
+
+// inflict gives f a condition. r is only needed for Sleep.
 func inflict(r *rand.Rand, f *Fighter, c data.Condition) {
 	f.Condition = c
 	switch c {
@@ -265,7 +382,11 @@ func inflict(r *rand.Rand, f *Fighter, c data.Condition) {
 }
 
 // rest fully heals the user and puts it to sleep for exactly 2 turns.
-func rest(s int, f *Fighter) []Event {
+func (b *Battle) rest(s int, f *Fighter) []Event {
+	if blocked, ok := b.fieldBlocks(data.Sleep); ok {
+		blocked.Side, blocked.Name = s, f.Name
+		return []Event{blocked}
+	}
 	if f.HP == f.Stats.HP || f.Condition == data.Sleep {
 		return []Event{{Kind: EvFail}}
 	}
@@ -274,6 +395,33 @@ func rest(s int, f *Fighter) []Event {
 	f.Condition = data.Sleep
 	f.sleepTurns = 2
 	return []Event{{Kind: EvRested, Side: s, Name: f.Name, Amount: healed}}
+}
+
+// protect shields the user for the rest of the turn. Each protection in a row is three
+// times less likely to work, and it always fails if the user is the last to move.
+func (b *Battle) protect(r *rand.Rand, s int, f *Fighter) []Event {
+	odds := 1
+	for range f.protectChain {
+		odds *= 3
+	}
+	if b.moved[1-s] || r.IntN(odds) != 0 {
+		f.protectChain = 0
+		return []Event{{Kind: EvFail}}
+	}
+	f.protected = true
+	f.protectChain++
+	return []Event{{Kind: EvProtecting, Side: s, Name: f.Name}}
+}
+
+// substitute spends a quarter of max HP to make a decoy with that much HP.
+func substitute(s int, f *Fighter) []Event {
+	cost := f.Stats.HP / 4
+	if f.substituteHP > 0 || f.HP <= cost {
+		return []Event{{Kind: EvFail}}
+	}
+	f.HP -= cost
+	f.substituteHP = cost
+	return []Event{{Kind: EvSubstitute, Side: s, Name: f.Name}}
 }
 
 // heal restores up to amount HP and returns how much was actually restored.
@@ -285,7 +433,8 @@ func heal(f *Fighter, amount int) int {
 
 // damage works out one hit, using the main games' formula: level, power and attack
 // over defense, then critical hit, random spread, same-type bonus, type matchup and burn.
-func damage(r *rand.Rand, user, target *Fighter, m data.Move, eff float64, canCrit bool) (dmg int, crit bool) {
+// With field set, weather, terrain and wards on side ts also apply.
+func (b *Battle) damage(r *rand.Rand, user, target *Fighter, ts int, m data.Move, eff float64, canCrit, field bool) (dmg int, crit bool) {
 	crit = canCrit && rollCrit(r, m.CritStage)
 
 	atkStat, defStat := data.StatAttack, data.StatDefense
@@ -297,24 +446,51 @@ func damage(r *rand.Rand, user, target *Fighter, m data.Move, eff float64, canCr
 		atkStage, defStage = max(atkStage, 0), min(defStage, 0)
 	}
 	atk := applyStage(user.Stats.Get(atkStat), atkStage)
-	def := max(1, applyStage(target.Stats.Get(defStat), defStage))
+	def := applyStage(target.Stats.Get(defStat), defStage)
+	if field {
+		// Sandstorm raises Martial types' Magic Defense; Blizzard raises Nature types' Defense.
+		if shelter, ok := data.WeatherShelter(b.Weather); ok && hasType(target, shelter) {
+			if (b.Weather == data.Sandstorm && defStat == data.StatMagicDefense) ||
+				(b.Weather == data.Blizzard && defStat == data.StatDefense) {
+				def = def * 3 / 2
+			}
+		}
+	}
+	def = max(def, 1)
 
 	base := float64((2*user.Level/5+2)*m.Power*atk/def)/50 + 2
 	mult := 0.85 + r.Float64()*0.15
 	if crit {
 		mult *= 1.5
 	}
-	for _, t := range user.Types {
-		if t == m.Type {
-			mult *= 1.5 // same-type attack bonus
-			break
-		}
+	if hasType(user, m.Type) {
+		mult *= 1.5 // same-type attack bonus
 	}
 	mult *= eff
 	if m.Category == data.Physical && user.Condition == data.Burn {
 		mult *= 0.5
 	}
+	if field {
+		mult *= data.WeatherMultiplier(b.Weather, m.Type) * data.TerrainMultiplier(b.Terrain, m.Type)
+		if b.Terrain == data.Overgrowth && m.Has(data.FlagGround) {
+			mult *= 0.5
+		}
+		side := b.Sides[ts]
+		if !crit && ((m.Category == data.Physical && side.turns[data.PhysicalWard] > 0) ||
+			(m.Category == data.Magical && side.turns[data.MagicWard] > 0)) {
+			mult *= 0.5 // wards halve damage, but critical hits go straight through
+		}
+	}
 	return max(1, int(base*mult)), crit
+}
+
+func hasType(f *Fighter, t data.Type) bool {
+	for _, ft := range f.Types {
+		if ft == t {
+			return true
+		}
+	}
+	return false
 }
 
 // critOdds is 1 in N for each crit stage.

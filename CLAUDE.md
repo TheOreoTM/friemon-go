@@ -52,6 +52,16 @@ internal/bot/       commands, handlers, cooldowns
 - Statuses and field effects use Pokémon mechanics with a mix of names: universal ones keep
   Pokémon names (Burn, Sleep, Freeze, Confusion), others are Frieren-themed.
 - Abilities, field effects and relic set bonuses plug into the battle engine through hooks.
+- Weather (5 turns): Heatwave (Destruction x1.5, Nature x0.5, no freezing, stronger heals),
+  Storm (Nature x1.5, Destruction x0.5, no burns, Lightning Magic never misses),
+  Sandstorm (1/16 chip except Martial; Martial x1.5 Magic Defense),
+  Blizzard (1/16 chip except Nature; Nature x1.5 Defense; Frost Magic never misses).
+- Terrain (5 turns): Mana Field (Destruction x1.3, no sleep), Sacred Ground (Holy x1.3, Curse x0.5,
+  blocks priority moves), Overgrowth (Nature x1.3, heals 1/16, ground moves x0.5),
+  Mist (no new conditions or confusion, Curse x0.5). No "grounded" rule.
+- Side conditions: Physical/Magic Ward (screens), Tailwind, Reversal Field (Trick Room),
+  hazards (Mana Mines, Caltrops, Curse Seals). Plus Protect, Substitute, charge and recharge
+  moves, trapping, Taunt, Encore and pivot moves.
 - Types: Destruction, Barrier, Holy, Martial, Curse, Nature. Moves are Physical (Attack/Defense),
   Magical (Magic Attack/Magic Defense) or Status.
 

@@ -48,8 +48,20 @@ func TestMovesAreValid(t *testing.T) {
 			}
 		}
 		// A status move with nothing to do would always fail.
-		if m.Category == Status && m.Heal == 0 && len(m.Effects) == 0 && !m.Has(FlagRest) {
+		special := FlagRest | FlagProtect | FlagSubstitute | FlagClearHazards | FlagReversal
+		if m.Category == Status && m.Heal == 0 && len(m.Effects) == 0 && m.Flags&special == 0 &&
+			m.Weather == NoWeather && m.Terrain == NoTerrain && m.Side == NoSideCondition {
 			t.Errorf("%s is a status move that does nothing", m.ID)
+		}
+		// Charging, recharging and pivoting only make sense on attacks.
+		if m.Category == Status && m.Flags&(FlagCharge|FlagRecharge|FlagPivot) != 0 {
+			t.Errorf("%s is a status move with a charge, recharge or pivot flag", m.ID)
+		}
+		if m.SureHitIn != NoWeather && m.Accuracy == 0 {
+			t.Errorf("%s never misses anyway, so SureHitIn does nothing", m.ID)
+		}
+		if m.NoChargeIn != NoWeather && !m.Has(FlagCharge) {
+			t.Errorf("%s has NoChargeIn but is not a charge move", m.ID)
 		}
 	}
 }

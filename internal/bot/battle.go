@@ -61,13 +61,30 @@ func (ab *activeBattle) replacing() bool {
 
 // needsInput reports whether player s has to choose something right now.
 func (ab *activeBattle) needsInput(s int) bool {
-	if ab.game.Over() {
+	g := ab.game
+	switch {
+	case g.Over():
 		return false
-	}
-	if ab.replacing() {
-		return ab.game.NeedsReplacement(s)
+	case g.PivotPending() >= 0:
+		return g.PivotPending() == s
+	case ab.replacing():
+		return g.NeedsReplacement(s)
+	case g.Forced(s):
+		return false // charging or recharging: the engine picks the action
 	}
 	return true
+}
+
+// actions collects both players' choices for PlayTurn. A side with no choice
+// (charging or recharging) gets an empty action, which the engine replaces.
+func (ab *activeBattle) actions() [2]game.Action {
+	var a [2]game.Action
+	for s, c := range ab.choices {
+		if c != nil {
+			a[s] = *c
+		}
+	}
+	return a
 }
 
 // waitingFor lists the players who still have to choose.
@@ -289,8 +306,10 @@ func (b *Bot) handleBattleChoose(e *handler.ComponentEvent) error {
 	default:
 		s := ab.playerIndex(e.User().ID)
 		switch {
+		case ab.game.Forced(s) && !ab.replacing() && ab.game.PivotPending() < 0:
+			reply = ephemeral(fmt.Sprintf("Your **%s** is busy charging or recharging this turn. Waiting for your opponent.", ab.game.Active(s).Name))
 		case !ab.needsInput(s):
-			reply = ephemeral("Waiting for your opponent to send out a character.")
+			reply = ephemeral("Waiting for your opponent.")
 		case ab.choices[s] != nil:
 			reply = ephemeral("You already chose this turn. Waiting for your opponent.")
 		default:
@@ -306,20 +325,23 @@ func actionMenu(ab *activeBattle, s int) discord.MessageCreate {
 	g := ab.game
 	f := g.Active(s)
 	prefix := fmt.Sprintf("/battle-act/%s/%d/", ab.id, ab.step)
+	onlySwitch := ab.replacing() || g.PivotPending() == s
 
 	var rows []discord.LayoutComponent
 	content := fmt.Sprintf("**%s** • %d/%d HP\nChoose a move or switch:", f.Name, f.HP, f.Stats.HP)
-
-	if ab.replacing() {
+	switch {
+	case g.PivotPending() == s:
+		content = fmt.Sprintf("**%s** is switching out! Choose who comes in:", f.Name)
+	case ab.replacing():
 		content = fmt.Sprintf("**%s** fainted! Choose who to send out:", f.Name)
-	} else {
+	default:
 		var moves []discord.InteractiveComponent
-		if f.HasPP() {
+		if f.HasUsableMove() {
 			for i, ms := range f.Moves {
 				label := fmt.Sprintf("%s (%d/%d)", ms.Move.Name, ms.PP, ms.Move.PP)
 				btn := discord.NewPrimaryButton(label, prefix+"m"+strconv.Itoa(i))
-				if ms.PP == 0 {
-					btn = btn.AsDisabled()
+				if !f.CanUse(i) {
+					btn = btn.AsDisabled() // no PP, taunted, or locked into another move
 				}
 				moves = append(moves, btn)
 			}
@@ -327,17 +349,22 @@ func actionMenu(ab *activeBattle, s int) discord.MessageCreate {
 			moves = append(moves, discord.NewDangerButton("Struggle", prefix+"m0"))
 		}
 		rows = append(rows, discord.NewActionRow(moves...))
-	}
-
-	var switches []discord.InteractiveComponent
-	for i, member := range g.Sides[s].Party {
-		if g.CanSwitchTo(s, i) {
-			label := fmt.Sprintf("%s (%d/%d HP)", member.Name, member.HP, member.Stats.HP)
-			switches = append(switches, discord.NewSecondaryButton(label, prefix+"s"+strconv.Itoa(i)))
+		if f.Trapped() {
+			content += fmt.Sprintf("\n**%s** is trapped and cannot switch out.", f.Name)
 		}
 	}
-	if len(switches) > 0 {
-		rows = append(rows, discord.NewActionRow(switches...))
+
+	if onlySwitch || !f.Trapped() {
+		var switches []discord.InteractiveComponent
+		for i, member := range g.Sides[s].Party {
+			if g.CanSwitchTo(s, i) {
+				label := fmt.Sprintf("%s (%d/%d HP)", member.Name, member.HP, member.Stats.HP)
+				switches = append(switches, discord.NewSecondaryButton(label, prefix+"s"+strconv.Itoa(i)))
+			}
+		}
+		if len(switches) > 0 {
+			rows = append(rows, discord.NewActionRow(switches...))
+		}
 	}
 
 	return discord.MessageCreate{Content: content, Components: rows, Flags: discord.MessageFlagEphemeral}
@@ -394,39 +421,62 @@ func (b *Bot) handleBattleAct(e *handler.ComponentEvent) error {
 			break
 		}
 
-		if ab.replacing() {
+		// Everyone needed has chosen: move the battle on.
+		r := newRand()
+		newMessage := false
+		switch g := ab.game; {
+		case g.PivotPending() >= 0:
+			// The rest of the turn plays out on the same message.
+			p := g.PivotPending()
+			ev, err := g.ChoosePivot(r, p, ab.choices[p].Index)
+			if err != nil {
+				log.Printf("battle %s pivot: %v", ab.id, err)
+			}
+			ab.log = append(ab.log, ev...)
+		case ab.replacing():
 			// Replacements are added to the current message instead of starting a new one.
 			for side := range ab.players {
-				if ab.game.NeedsReplacement(side) {
-					ev, err := ab.game.Replace(side, ab.choices[side].Index)
+				if g.NeedsReplacement(side) && ab.choices[side] != nil {
+					ev, err := g.Replace(side, ab.choices[side].Index)
 					if err != nil {
 						log.Printf("battle %s replace: %v", ab.id, err)
 					}
 					ab.log = append(ab.log, ev...)
 				}
 			}
-			ab.choices = [2]*game.Action{}
-			ab.step++
-			u := battleUpdate(ab, true)
+		default:
+			// Close off this turn's message (final footer, no buttons), then play the turn.
+			u := battleUpdate(ab, false)
 			edit = &u
-			break
+			ev, err := g.PlayTurn(r, ab.actions())
+			if err != nil {
+				log.Printf("battle %s turn: %v", ab.id, err)
+			}
+			ab.log = ev
+			newMessage = true
 		}
-
-		// Close off this turn's message: final footer, no buttons. Then play the turn.
-		u := battleUpdate(ab, false)
-		edit = &u
-		ev, err := ab.game.PlayTurn(newRand(), [2]game.Action{*ab.choices[0], *ab.choices[1]})
 		ab.choices = [2]*game.Action{}
 		ab.step++
-		if err != nil {
-			log.Printf("battle %s turn: %v", ab.id, err)
+
+		// If both sides are charging or recharging, nobody has a choice: play on at once.
+		for g := ab.game; !g.Over() && g.PivotPending() < 0 && !ab.replacing() && g.Forced(0) && g.Forced(1); {
+			ev, err := g.PlayTurn(r, [2]game.Action{})
+			if err != nil {
+				log.Printf("battle %s forced turn: %v", ab.id, err)
+				break
+			}
+			ab.log = append(ab.log, ev...)
 		}
-		ab.log = ev
 		if ab.game.Over() {
 			saves = b.battles.end(ab)
 		}
-		c := battleCreate(ab)
-		next = &c
+		if newMessage {
+			c := battleCreate(ab)
+			next = &c
+		} else {
+			u := battleUpdate(ab, true)
+			edit = &u
+		}
 	}
 	b.battles.mu.Unlock()
 
@@ -473,17 +523,16 @@ func (b *Bot) handleBattleAct(e *handler.ComponentEvent) error {
 // validAction checks a choice before it is stored. The caller must hold the lock.
 func validAction(ab *activeBattle, s int, a game.Action) bool {
 	g := ab.game
-	if a.Switch {
-		return g.CanSwitchTo(s, a.Index)
-	}
-	if ab.replacing() {
-		return false // only switching is allowed when replacing a fainted character
-	}
 	f := g.Active(s)
-	if !f.HasPP() {
+	switch {
+	case g.PivotPending() == s || ab.replacing():
+		return a.Switch && g.CanSwitchTo(s, a.Index) // only switching is allowed
+	case a.Switch:
+		return !f.Trapped() && g.CanSwitchTo(s, a.Index)
+	case !f.HasUsableMove():
 		return true // struggle
 	}
-	return a.Index >= 0 && a.Index < len(f.Moves) && f.Moves[a.Index].PP > 0
+	return f.CanUse(a.Index)
 }
 
 func describeAction(g *game.Battle, s int, a game.Action) string {
@@ -491,7 +540,7 @@ func describeAction(g *game.Battle, s int, a game.Action) string {
 		return "to send out **" + g.Sides[s].Party[a.Index].Name + "**"
 	}
 	f := g.Active(s)
-	if !f.HasPP() {
+	if !f.HasUsableMove() {
 		return "**Struggle**"
 	}
 	return "**" + f.Moves[a.Index].Move.Name + "**"
@@ -620,6 +669,9 @@ func battleEmbed(ab *activeBattle, buttons bool) discord.Embed {
 	}
 	embed = embed.WithDescription(desc)
 
+	if field := fieldSummary(g); field != "" {
+		embed = embed.AddField("Field", field, false)
+	}
 	// Inline fields sit side by side, one per player.
 	for s, p := range ab.players {
 		embed = embed.AddField(p.name, sideSummary(g, s), true)
@@ -628,6 +680,8 @@ func battleEmbed(ab *activeBattle, buttons bool) discord.Embed {
 	waiting := ab.waitingFor()
 	switch {
 	case g.Over():
+	case buttons && g.PivotPending() >= 0:
+		embed = embed.WithFooterTextf("Waiting for %s to choose who comes in", strings.Join(waiting, " and "))
 	case buttons && ab.replacing():
 		embed = embed.WithFooterTextf("Waiting for %s to send out a character", strings.Join(waiting, " and "))
 	case buttons:
@@ -659,6 +713,44 @@ func sideSummary(g *game.Battle, s int) string {
 		b.WriteString("\n" + strings.Join(stages, ", "))
 	}
 
+	var states []string
+	if hp := f.SubstituteHP(); hp > 0 {
+		states = append(states, fmt.Sprintf("Double (%d HP)", hp))
+	}
+	if f.Trapped() {
+		states = append(states, "Trapped")
+	}
+	if f.Taunted() {
+		states = append(states, "Provoked")
+	}
+	if slot := f.EncoreSlot(); slot >= 0 {
+		states = append(states, "Compelled: "+f.Moves[slot].Move.Name)
+	}
+	if g.Forced(s) {
+		states = append(states, "Busy next turn")
+	}
+	if len(states) > 0 {
+		b.WriteString("\n" + strings.Join(states, " • "))
+	}
+
+	side := g.Sides[s]
+	var conds []string
+	for _, c := range []data.SideCondition{data.PhysicalWard, data.MagicWard, data.Tailwind} {
+		if n := side.TurnsLeft(c); n > 0 {
+			conds = append(conds, fmt.Sprintf("%s (%d)", c, n))
+		}
+	}
+	for _, c := range []data.SideCondition{data.ManaMines, data.Caltrops, data.CurseSeals} {
+		if n := side.Layers(c); n == 1 {
+			conds = append(conds, c.String())
+		} else if n > 1 {
+			conds = append(conds, fmt.Sprintf("%s x%d", c, n))
+		}
+	}
+	if len(conds) > 0 {
+		b.WriteString("\n🛡️ " + strings.Join(conds, ", "))
+	}
+
 	b.WriteString("\n")
 	for _, member := range g.Sides[s].Party {
 		if member.Fainted() {
@@ -668,6 +760,29 @@ func sideSummary(g *game.Battle, s int) string {
 		}
 	}
 	return b.String()
+}
+
+// fieldSummary shows the weather, terrain and Reversal Field with turns left, or "".
+func fieldSummary(g *game.Battle) string {
+	var parts []string
+	if g.Weather != data.NoWeather {
+		parts = append(parts, fmt.Sprintf("%s %s (%d)", weatherIcon[g.Weather], g.Weather, g.WeatherTurns))
+	}
+	if g.Terrain != data.NoTerrain {
+		parts = append(parts, fmt.Sprintf("%s %s (%d)", terrainIcon[g.Terrain], g.Terrain, g.TerrainTurns))
+	}
+	if g.ReversalTurns > 0 {
+		parts = append(parts, fmt.Sprintf("🔄 Reversal Field (%d)", g.ReversalTurns))
+	}
+	return strings.Join(parts, " • ")
+}
+
+var weatherIcon = map[data.Weather]string{
+	data.Heatwave: "☀️", data.Storm: "⛈️", data.Sandstorm: "🌪️", data.Blizzard: "❄️",
+}
+
+var terrainIcon = map[data.Terrain]string{
+	data.ManaField: "✨", data.SacredGround: "⛪", data.Overgrowth: "🌿", data.Mist: "🌫️",
 }
 
 func shortStat(s data.Stat) string {
